@@ -1,0 +1,6 @@
+# exclude
+.ipynb_checkpoints
+trained_models/*
+
+# exception to the rule
+!trained_models/gym-pacman_random_mnih2016
