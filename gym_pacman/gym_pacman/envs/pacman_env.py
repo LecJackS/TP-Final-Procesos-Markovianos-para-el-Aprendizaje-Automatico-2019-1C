@@ -36,13 +36,11 @@ fdir = '/'.join(os.path.split(__file__)[:-1])
 layout_params = json.load(open(fdir + '/../../layout_params.json'))
 
 class PacmanEnv(gym.Env):
-    
-
     layouts = [
         'capsuleClassic', 'contestClassic', 'mediumClassic', 'mediumGrid', 'minimaxClassic', 'openClassic', 'originalClassic', 'smallClassic', 'capsuleClassic', 'smallGrid', 'testClassic', 'trappedClassic', 'trickyClassic'
     ]
 
-    noGhost_layouts = [l + '_noGhosts' for l in layouts]
+    noGhost_layouts = [l+'_noGhosts' for l in layouts]
 
     MAX_MAZE_SIZE = (7, 7)
     num_envs = 1
