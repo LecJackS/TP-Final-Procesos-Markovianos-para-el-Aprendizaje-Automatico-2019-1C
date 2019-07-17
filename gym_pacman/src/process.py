@@ -146,8 +146,8 @@ def local_train(index, opt, global_model, optimizer, save=False):
             critic_loss = critic_loss + (R - value) ** 2 / 2
             entropy_loss = entropy_loss + entropy
         # Clamp critic loss value if too big
-        #max_critic_loss = 1./opt.lr
-        #critic_loss = critic_loss.clamp(-max_critic_loss, max_critic_loss)
+        max_critic_loss = 1./opt.lr
+        critic_loss = critic_loss.clamp(-max_critic_loss, max_critic_loss)
         # Total process' loss
         total_loss = -actor_loss + critic_loss - opt.beta * entropy_loss
         # Clamp loss value if too big

@@ -52,7 +52,7 @@ class SameReward(Wrapper):
         # Process frame to 84x84px grayscale 
         state = process_frame(state)
         #print("info:", info)
-        reward = info["score"] / 1000.
+        reward = info["score"] / 50. #/1000.
 
         #print("\naction:",action,"  reward:", reward)
         #print(info, "\n")

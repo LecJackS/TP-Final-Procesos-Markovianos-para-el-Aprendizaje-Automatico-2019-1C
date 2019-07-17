@@ -3,6 +3,7 @@
 """
 
 import os
+# To NOT use OpenMP threads within numpy processes
 os.environ['OMP_NUM_THREADS'] = '1'
 import argparse
 import torch
@@ -10,9 +11,9 @@ from src.env import create_train_env
 from src.model import Mnih2016ActorCriticWithDropout
 AC_NN_MODEL = Mnih2016ActorCriticWithDropout
 
-#import process
 from src.optimizer import GlobalRMSProp, GlobalAdam
 from src.process import local_train, local_test
+# For the async policies updates
 import torch.multiprocessing as _mp
 import shutil
 
