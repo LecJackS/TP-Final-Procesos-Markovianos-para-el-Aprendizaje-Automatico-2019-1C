@@ -25,9 +25,9 @@ PACMAN_ACTIONS = ['North', 'South', 'East', 'West', 'Stop']
 PACMAN_DIRECTIONS = ['North', 'South', 'East', 'West']
 ROTATION_ANGLES = [0, 180, 90, 270]
 
-MAX_EP_LENGTH = 10000
-PENALTY_MAX_EP = 500.0
-PENALTY_ILLEGAL_ACTION = 10.0
+MAX_EP_LENGTH = 105
+PENALTY_MAX_EP = 0.0 # positive number
+PENALTY_ILLEGAL_ACTION = 5.0
 PENALTY_TIME_STEP = 1.0
 
 import os
@@ -187,6 +187,8 @@ class PacmanEnv(gym.Env):
                     'r': self.cum_reward,
                     'l': self.step_counter
                 }],
+                # adding score so far
+                'score': self.cum_reward,
                 'max_ep': self.step_counter >= MAX_EP_LENGTH
             }
         #print("Action chosen :", action, "  ", end="\r")
@@ -282,8 +284,27 @@ class PacmanEnv(gym.Env):
                 DEFAULT_GRID_SIZE_X *  (self.location[0]+1 + OBS_RANGE_X),
                 DEFAULT_GRID_SIZE_Y *  (self.layout.height - (self.location[1] - OBS_RANGE_Y-0.2))]
             extent = tuple([int(e) for e in extent])
+            image = image.crop(extent)#.resize(self.image_sz)
+        remove_borders = True
+        if remove_borders:
+            w, h = image.size
+            DEFAULT_GRID_SIZE_X = w / float(self.layout.width)
+            DEFAULT_GRID_SIZE_Y = h / float(self.layout.height)
+            OBS_RANGE_X=1 # observed cells at each side
+            OBS_RANGE_Y=1
+            #border_up    =
+            #border_down  =
+            #border_left  =
+            #border_right =
+            extent = [
+                DEFAULT_GRID_SIZE_X *  (1),
+                DEFAULT_GRID_SIZE_Y *  (1), # VISION RANGE
+                DEFAULT_GRID_SIZE_X *  (self.layout.width - 1),
+                DEFAULT_GRID_SIZE_Y *  (self.layout.height - 1)]
+            extent = tuple([int(e) for e in extent])
+            image = image.crop(extent)#.resize(self.image_sz)
         self.image_sz = (84, 84)
-        #image = image.crop(extent).resize(self.image_sz)
+        
         image = image.resize(self.image_sz)
         return np.array(image)[:,:,:3] # Remove 4th channel (alpha) if there is one
 

@@ -199,42 +199,75 @@ def getRandomLayout(layout_params, np_random):
 def randomLayout(layout_params, np_random):
     nok = False
     # SLayout size
-    random_size = False
-    if random_size:
-        min_size = 9
-        max_size = 11
-        size = np.random.randint(min_size, max_size+1)
-    else:
-        size = layout_params.get('size', 7)
+    #random_size = False
+    #if random_size:
+    #    min_size = 9
+    #    max_size = 11
+    #    size = np.random.randint(min_size, max_size+1)
+    #else:
+    #    size = layout_params.get('size', 7)
+    min_size = layout_params.get('min_size', 7)
+    max_size = layout_params.get('max_size', 7)
+    size = np.random.randint(min_size, max_size+1)
     # Ghosts
-    random_nghosts = True
-    if random_nghosts:
-        min_nghosts = 1
-        max_nghosts = 3
-        nghosts = np.random.randint(min_nghosts, max_nghosts+1)
-    else:
-        nghosts = layout_params.get('nghosts', 1)
-    npellets = layout_params.get('npellets', 1)
+    #random_nghosts = True
+    #if random_nghosts:
+    #    min_nghosts = 1
+    #    max_nghosts = 3
+    #    nghosts = np.random.randint(min_nghosts, max_nghosts+1)
+    #else:
+    #    nghosts = layout_params.get('nghosts', 1)
+    min_nghosts = layout_params.get('min_nghosts', 1)
+    max_nghosts = layout_params.get('max_nghosts', 2)
+    nghosts = np.random.randint(min_nghosts, max_nghosts+1)
+    #random_npellets = True
+    #if random_npellets:
+    #    min_npellets = 1
+    #    max_npellets = 5
+    #    npellets = np.random.randint(min_npellets, max_npellets)
+    #else:
+    #    npellets = layout_params.get('npellets', 1)
+    min_npellets = layout_params.get('min_npellets', 1)
+    max_npellets = layout_params.get('max_npellets', 5)
+    npellets = np.random.randint(min_npellets, max_npellets+1)
 
-    random_food_proportion = True
-    if random_food_proportion:
-        min_food_p = 0.02 #1/50
-        max_food_p = 0.1
-        food_proportion = np.random.uniform(min_food_p, max_food_p)
-    else:
-        food_proportion = layout_params.get('food_proportion', 1.0)
+    #random_food_proportion = False
+    #if random_food_proportion:
+    #    min_food_p = 0.02 #1/50
+    #    max_food_p = 0.1
+    #    food_proportion = np.random.uniform(min_food_p, max_food_p)
+    #else:
+    #    food_proportion = layout_params.get('food_proportion', 1.0)
     by_proportion = layout_params.get('by_proportion', True)
+    min_food_p = layout_params.get('min_food_proportion', 0.1)
+    max_food_p = layout_params.get('min_food_proportion', 0.5)
+    food_proportion = np.random.uniform(min_food_p, max_food_p)
+    
+    # Adds walls randomly arranged
     decimate = layout_params.get('decimate', 0.3)
-
     start_x, start_y = np_random.randint(1, size - 1), np_random.randint(1, size - 1)
-
     maze = generateMaze(size, decimate, (start_y, start_x), np_random).astype(np.int) # < ---- start_x, start_y?
     # maze = np.zeros((size, size), dtype=np.int)
     # maze[1:size-1, 1:size-1] = maze_
+    # Set pacman position
     maze[start_y, start_x] = PACMAN
-
     empty_positions = np.where(maze == EMPTY)
-
+    # Set ghosts positions
+    # filter out positions within 2 steps of pacman
+    empty_positions = np.vstack(empty_positions)
+    filter_ix = np.where(np.sum(np.abs(empty_positions - np.expand_dims([start_y, start_x], 1)), axis=0) > 2)[0]
+    empty_positions_on_range = empty_positions[:, filter_ix]
+    if empty_positions_on_range.shape[1] >= nghosts and nghosts > 0: # if found a proper place to put ghost
+        ghost_position_ix = np_random.choice(empty_positions_on_range.shape[1], nghosts)
+        for gix in ghost_position_ix:
+            ghost_pos_y, ghost_pos_x = empty_positions_on_range[0][gix], empty_positions_on_range[1][gix]
+            maze[ghost_pos_y, ghost_pos_x] = GHOST
+    elif nghosts > 0:
+        print('Could not find enough positions for ghosts')
+        return None, True
+    # Set food positions
+    empty_positions = np.where(maze == EMPTY)
+    empty_positions = np.vstack(empty_positions)
     foods = []
     if by_proportion:
         for ix in range(empty_positions[0].shape[0]):
@@ -243,10 +276,6 @@ def randomLayout(layout_params, np_random):
                 foods.append((empty_positions[0][ix], empty_positions[1][ix]))
     else:
         food_positions = np.random.choice(np.arange(empty_positions[0].shape[0]), npellets)
-
-        #food_pos_y = empty_positions[0]
-        #food_pos_x = empty_positions[1]
-        
         for pos in food_positions:
             food_pos_y = empty_positions[0][pos]
             food_pos_x = empty_positions[1][pos]
@@ -263,19 +292,7 @@ def randomLayout(layout_params, np_random):
         return None, True
     empty_positions = np.where(maze == EMPTY)
 
-    # filter out positions within 2 steps of pacman
-    empty_positions = np.vstack(empty_positions)
-    filter_ix = np.where(np.sum(np.abs(empty_positions - np.expand_dims([start_y, start_x], 1)), axis=0) > 2)[0]
-    empty_positions = empty_positions[:, filter_ix]
-
-    if empty_positions.shape[1] >= nghosts and nghosts > 0: # if found a proper place to put ghost
-        ghost_position_ix = np_random.choice(empty_positions.shape[1], nghosts)
-        for gix in ghost_position_ix:
-            ghost_pos_y, ghost_pos_x = empty_positions[0][gix], empty_positions[1][gix]
-            maze[ghost_pos_y, ghost_pos_x] = GHOST
-    else:
-        print('Could not find enough positions for ghosts')
-        return None, True
+    
 
     maze_str = []
     for i in range(maze.shape[0]):

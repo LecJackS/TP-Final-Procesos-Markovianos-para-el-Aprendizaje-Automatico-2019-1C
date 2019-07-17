@@ -1,0 +1,9 @@
+{
+    "nghosts": 1, 
+    "npellets": 1,
+    "food_proportion": 0.8,
+    "by_proportion": true,
+    "min_ghost_distance": 10,
+    "size": 18,
+    "decimate": 1.0
+}

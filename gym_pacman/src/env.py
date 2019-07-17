@@ -52,7 +52,7 @@ class SameReward(Wrapper):
         # Process frame to 84x84px grayscale 
         state = process_frame(state)
         #print("info:", info)
-        reward = info["score"] / 50. #/1000.
+        reward = info["score"] #/ 500. #/1000.
 
         #print("\naction:",action,"  reward:", reward)
         #print(info, "\n")
@@ -326,10 +326,13 @@ class CustomSkipFrame(Wrapper):
 
 
 #def create_train_env(world, stage, action_type, output_path=None):
-def create_train_env(layout, output_path=None):
+def create_train_env(layout, output_path=None, index=None):
     #env = gym_super_mario_bros.make("SuperMarioBros-{}-{}-v0".format(world, stage))
     #env = gym_pacman.make("PacmanBerkeley-{}-{}-v0".format(world, stage))
-    print("Create train env:",layout)
+    if index is not None:
+        print("Process {} - Create train env for {}".format(index, layout))
+    else:
+        print("Getting number of NN inputs/outputs for layout", layout)
     env = gym.make('BerkeleyPacman-v0')
     #output_path = 'output/un_video.mp4' # Beware! Can freeze training for some reason.
     if output_path:

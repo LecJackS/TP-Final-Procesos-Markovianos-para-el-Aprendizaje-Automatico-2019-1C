@@ -1,7 +1,7 @@
 """
 @author: Viet Nguyen <nhviet1009@gmail.com>
 """
-
+import numpy as np
 import torch
 from src.env import create_train_env
 
@@ -26,7 +26,7 @@ def local_train(index, opt, global_model, optimizer, save=False):
     process_log_path = "{}/process-{}".format(opt.log_path, index)
     writer = SummaryWriter(process_log_path)#, max_queue=1000, flush_secs=10)
     # Creates training environment for this particular process
-    env, num_states, num_actions = create_train_env(opt.layout)
+    env, num_states, num_actions = create_train_env(opt.layout, index=index)
     # local_model keeps local weights for each async process
     local_model = AC_NN_MODEL(num_states, num_actions)
     if opt.use_gpu:
@@ -47,7 +47,7 @@ def local_train(index, opt, global_model, optimizer, save=False):
 
                 torch.save(global_model.state_dict(),
                            "{}/gym-pacman_{}".format(opt.saved_path, opt.layout))
-        print("Process {}. Episode {}".format(index, curr_episode), end="\r")
+        print("Process {}. Episode {}   ".format(index, curr_episode), end="\r")
         curr_episode += 1
         # Synchronize thread-specific parameters theta'=theta and theta'_v=theta_v
         # (copy global params to local params (after every episode))
@@ -118,13 +118,25 @@ def local_train(index, opt, global_model, optimizer, save=False):
             if done:
                 # All local steps done.
                 break
+        # Baseline rewards standarization over episode rewards.
+        # Uncomment prints to see how rewards change
+        #if index == 0:
+        #    print("Rewards before:", rewards)
+        mean_rewards = np.mean(rewards)
+        std_rewards  = np.std(rewards)
+        rewards = (rewards - mean_rewards) / (std_rewards + 1e-9)
+        #if index == 0:
+        #    print("Rewards after:", rewards)
         # Initialize R/G_t: Discounted reward over local steps
         R = torch.zeros((1, 1), dtype=torch.float)
         if opt.use_gpu:
             R = R.cuda()
         if not done:
             _, R, _, _ = local_model(state, h_0, c_0)
-
+        # Standarize this reward estimation too
+        #mean_rewards = np.mean([R, rewards])
+        #std_rewards  = np.std([R, rewards])
+        R = (R - mean_rewards) / (std_rewards + 1e-9)
         gae = torch.zeros((1, 1), dtype=torch.float)
         if opt.use_gpu:
             gae = gae.cuda()
@@ -139,11 +151,11 @@ def local_train(index, opt, global_model, optimizer, save=False):
             gae = gae + reward + opt.gamma * next_value.detach() - value.detach()
             next_value = value
             # Accumulate discounted reward
-            R = R * opt.gamma + reward
+            R = reward + opt.gamma * R
             # Accumulate gradients wrt parameters theta'
             actor_loss = actor_loss + log_policy * gae
             # Accumulate gradients wrt parameters theta'_v
-            critic_loss = critic_loss + (R - value) ** 2 / 2
+            critic_loss = critic_loss + ((R - value)**2) / 2.
             entropy_loss = entropy_loss + entropy
         # Clamp critic loss value if too big
         max_critic_loss = 1./opt.lr
@@ -151,7 +163,7 @@ def local_train(index, opt, global_model, optimizer, save=False):
         # Total process' loss
         total_loss = -actor_loss + critic_loss - opt.beta * entropy_loss
         # Clamp loss value if too big
-        #max_loss = 1./opt.lr
+        max_loss = 0.1/opt.lr
         #total_loss = total_loss.clamp(-max_loss, max_loss)
 
         # Saving logs for TensorBoard
@@ -186,7 +198,7 @@ def local_train(index, opt, global_model, optimizer, save=False):
 
 def local_test(index, opt, global_model):
     torch.manual_seed(123 + index)
-    env, num_states, num_actions = create_train_env(opt.layout)
+    env, num_states, num_actions = create_train_env(opt.layout, index=index)
     local_model = AC_NN_MODEL(num_states, num_actions)
     # Test model we are going to test (turn off dropout, no backward pass)
     local_model.eval()

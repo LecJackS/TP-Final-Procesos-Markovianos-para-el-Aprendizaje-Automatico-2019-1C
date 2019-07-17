@@ -68,7 +68,7 @@ def train(opt):
             global_model.load_state_dict(torch.load(file_))
             print("Done.")
         else:
-            print("Can't load any previous weights for %s!" %opt.layout)
+            print("Can't load any previous weights for %s! Starting from scratch..." %opt.layout)
     # Define optimizer with shared weights. See 'optimizer.py'
     optimizer = GlobalAdam(global_model.parameters(), lr=opt.lr)
     # Create async processes
