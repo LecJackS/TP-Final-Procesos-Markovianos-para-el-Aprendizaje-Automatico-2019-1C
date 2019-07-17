@@ -163,8 +163,8 @@ def local_train(index, opt, global_model, optimizer, save=False):
         # Total process' loss
         total_loss = -actor_loss + critic_loss - opt.beta * entropy_loss
         # Clamp loss value if too big
-        max_loss = 0.1/opt.lr
-        #total_loss = total_loss.clamp(-max_loss, max_loss)
+        max_loss = 10/opt.lr
+        total_loss = total_loss.clamp(-max_loss, max_loss)
 
         # Saving logs for TensorBoard
         writer.add_scalar("Total_{}/Loss".format(index), total_loss, curr_episode)

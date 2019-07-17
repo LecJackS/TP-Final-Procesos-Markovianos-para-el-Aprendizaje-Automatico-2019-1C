@@ -4,7 +4,7 @@ Continues from here: https://github.com/LecJackS/Procesos-Markovianos-Para-el-Ap
 ### Very Quick Roadmap to
 # Asynchronous Advantage Actor Critic (A3C)
 
-![input-to-nn-channel-combined](./img/snaps-0-1-2-3.gif)
+![input-to-nn-channel-combined](./img/snaps-0-1-2-3-x2.gif)
 
 * All explanation is in [the main notebook](Very%quick%roadmap%to%Asynchronous%Advantage%Actor%Critic.ipynb)
 
