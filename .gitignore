@@ -1,6 +1,11 @@
 # exclude
-.ipynb_checkpoints
+.ipynb_checkpoints/*
 gym_pacman/trained_models/*
+gym_pacman/tensorboard/*
+gym_pacman/*.pyc
+gym_pacman/gym_pacman.egg-info
+
 
 # exception to the rule
 !gym_pacman/trained_models/gym-pacman_random_mnih2016
+!gym_pacman/tensorboard/.gitkeep
