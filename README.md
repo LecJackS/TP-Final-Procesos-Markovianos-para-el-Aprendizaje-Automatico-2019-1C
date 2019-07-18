@@ -8,6 +8,8 @@ Continues from here: https://github.com/LecJackS/Procesos-Markovianos-Para-el-Ap
 
 ### Installation
 
+    git clone this-repo
+    
     conda create --name myenv
     conda activate myenv
     
