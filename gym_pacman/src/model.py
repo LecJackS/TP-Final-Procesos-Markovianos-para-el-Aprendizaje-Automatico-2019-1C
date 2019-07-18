@@ -10,9 +10,8 @@ class Mnih2016ActorCriticWithDropout(nn.Module):
     """Same as Mnih2016ActorCritic but with dropout layers for each layer"""
     def __init__(self, num_inputs, num_actions):
         super(Mnih2016ActorCriticWithDropout, self).__init__()
-        self.p_drop = 0.5
-        self.p_drop_conv = 0.2
-        self.p_drop_lstm = 0.2
+        self.p_drop = 0.0
+        self.p_drop_conv = 0.0
         self.conv1_drop = nn.Dropout2d(p=self.p_drop_conv)
         self.conv1      = nn.Conv2d(num_inputs, 16, 8, stride=4) #no padding
         self.conv2_drop = nn.Dropout2d(p=self.p_drop_conv)
@@ -48,14 +47,16 @@ class Mnih2016ActorCriticWithDropout(nn.Module):
         # Uncomment to print forward values
         #print("Actor: " , actor)
         #print("Critic: ", critic)
-        # Change dropout rate every forward pass
-        min_drop = 0.0
-        max_drop_conv   = 0.2
-        max_drop_linear = 0.6
-        random_dropout_rate_conv   = torch.FloatTensor(1).uniform_(min_drop, max_drop_conv).item()
-        random_dropout_rate_linear = torch.FloatTensor(1).uniform_(min_drop, max_drop_linear).item()
-        self.p_drop_conv   = random_dropout_rate_conv
-        self.p_drop_linear = random_dropout_rate_linear
+        use_dropout = False
+        if use_dropout:
+            # Changes dropout rate every forward pass
+            min_drop = 0.0
+            max_drop_conv   = 0.2
+            max_drop_linear = 0.6
+            random_dropout_rate_conv   = torch.FloatTensor(1).uniform_(min_drop, max_drop_conv).item()
+            random_dropout_rate_linear = torch.FloatTensor(1).uniform_(min_drop, max_drop_linear).item()
+            self.p_drop_conv   = random_dropout_rate_conv
+            self.p_drop_linear = random_dropout_rate_linear
         return actor, critic, hx, cx
 
 

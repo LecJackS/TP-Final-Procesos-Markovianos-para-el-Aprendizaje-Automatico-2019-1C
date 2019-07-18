@@ -6,12 +6,33 @@ Continues from here: https://github.com/LecJackS/Procesos-Markovianos-Para-el-Ap
 
 ![input-to-nn-channel-combined](./img/snaps-0-1-2-3-x2.gif)
 
+### Installation
+
+    conda create --name myenv
+    conda activate myenv
+    
+    conda install pytorch-cpu torchvision-cpu -c pytorch
+    # To allow GPU use (not required for this project)
+    #conda install pytorch torchvision cudatoolkit=9.0 -c pytorch
+
+Other systems: https://pytorch.org/get-started/locally/
+
+    # Other needed packages
+    conda install gym numpy matplotlib 
+    
+To see pretty loss plots (needs tensorboard, but not tensorflow)
+
+    conda install tensorboard 
+    tensorboard --logdir=./gym_pacman/tensorboard
+
+### Index
+
 * All explanation is in [the main notebook](Very%quick%roadmap%to%Asynchronous%Advantage%Actor%Critic.ipynb)
 
 * All action is divided in two pacman_folders:
-  1. cs188x_pacman: with Berkeley's Pac-man simulator and two functional Q-agents
+  1. ***./cs188x_pacman***: with Berkeley's Pac-man simulator and two functional Q-agents
     
-  2. gym_pacman: also with Berkeley's Pac-man with almost complete portability to Gym environments.
+  2. ***./gym_pacman***: also with Berkeley's Pac-man with almost complete portability to Gym environments.
      
      Basically all the action is in the 2nd one, so you may want to pay attention to:
      

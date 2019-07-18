@@ -120,6 +120,7 @@ def local_train(index, opt, global_model, optimizer, save=False):
                 break
         # Baseline rewards standarization over episode rewards.
         # Uncomment prints to see how rewards change
+        # Should I
         #if index == 0:
         #    print("Rewards before:", rewards)
         mean_rewards = np.mean(rewards)
@@ -163,7 +164,7 @@ def local_train(index, opt, global_model, optimizer, save=False):
         # Total process' loss
         total_loss = -actor_loss + critic_loss - opt.beta * entropy_loss
         # Clamp loss value if too big
-        max_loss = 10/opt.lr
+        max_loss =  2 * max_critic_loss 
         total_loss = total_loss.clamp(-max_loss, max_loss)
 
         # Saving logs for TensorBoard
