@@ -140,7 +140,7 @@ class NoSkipFrame(Wrapper):
         #done = self.done
         state, reward, done, info = self.env.step(action)
         # we need a four channel input
-        copies = 4 # instead of copies, do transformations! <<<  TODO
+        copies = 4 # instead of copies, do transformations!
         for i in range(copies):
             states.append(state)
         states = np.concatenate(states, 0)[None, :, :, :]
@@ -341,15 +341,11 @@ def create_train_env(layout, output_path=None, index=None):
 
     # Pacman Actions https://github.com/Kautenja/nes-py/wiki/Wrap
     actions = ['North', 'South', 'East', 'West', 'Stop']
-    #actions = [['up'],['down'],['right'],['left'],['NOOP']]
-    #env = BinarySpaceToDiscreteSpaceEnv(env, actions)
-    #env = JoypadSpace(env, actions)
+    # Wraps around env:
     #env = CustomReward(env, monitor)
     env = SameReward(env, monitor)
     #env = CustomSkipFrame(env)
     #env = DQNSkipFrame(env)
-    #env = SimpleSkipFrame(env)
-    #env = MinimSkipFrame(env)
     # Four times same frame input, no skip
     #env = NoSkipFrame(env)
     # Four rotations of same frame input, no skip

@@ -20,11 +20,17 @@ Continues from here: https://github.com/LecJackS/Procesos-Markovianos-Para-el-Ap
 Other systems: https://pytorch.org/get-started/locally/
 
     # Other needed packages
-    conda install gym numpy matplotlib 
+    conda install numpy matplotlib tensorboard
+    conda install -c conda-forge opencv
+    pip install gym
+    
+Highly recommended (for this and ather projects on notebooks):
+    
+    # Jupyter notebook extensions
+    conda install -c conda-forge jupyter_contrib_nbextensions
     
 To see pretty loss plots (needs tensorboard, but not tensorflow)
 
-    conda install tensorboard 
     tensorboard --logdir=./gym_pacman/tensorboard
 
 ### Index
@@ -43,5 +49,7 @@ To see pretty loss plots (needs tensorboard, but not tensorflow)
      *GraphicsUtils.py* for doing something more clever with the non-optional rendering of the game, 16 windows can be a lot! (right now I moved them 600 pixels) to the left of the screen)
      
      *Pacman_env* for tweaking layouts chosen, ghosts, pellets.
+     
+     *env.py* for rewards and input preprocessing to NN (*create_train_env*)
      
      

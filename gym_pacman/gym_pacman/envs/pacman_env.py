@@ -26,7 +26,7 @@ PACMAN_DIRECTIONS = ['North', 'South', 'East', 'West']
 ROTATION_ANGLES = [0, 180, 90, 270]
 
 MAX_EP_LENGTH = 105
-PENALTY_MAX_EP = 0.0 # positive number
+PENALTY_MAX_EP = 500.0 # positive number
 PENALTY_ILLEGAL_ACTION = 5.0
 PENALTY_TIME_STEP = 1.0
 

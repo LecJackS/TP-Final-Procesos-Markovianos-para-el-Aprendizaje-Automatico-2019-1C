@@ -2,3 +2,6 @@
 pytorch
 numpy
 matplotlib
+opencv
+gym
+tensorboard
