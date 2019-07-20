@@ -1,6 +1,3 @@
-"""
-@author: Viet Nguyen <nhviet1009@gmail.com>
-"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -47,7 +44,7 @@ class Mnih2016ActorCriticWithDropout(nn.Module):
         # Uncomment to print forward values
         #print("Actor: " , actor)
         #print("Critic: ", critic)
-        use_dropout = False
+        use_dropout = True
         if use_dropout:
             # Changes dropout rate every forward pass
             min_drop = 0.0

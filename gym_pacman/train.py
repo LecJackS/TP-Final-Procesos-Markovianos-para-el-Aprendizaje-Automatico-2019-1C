@@ -1,7 +1,3 @@
-"""
-@author: Viet Nguyen <nhviet1009@gmail.com>
-"""
-
 import os
 # To NOT use OpenMP threads within numpy processes
 os.environ['OMP_NUM_THREADS'] = '1'
@@ -11,7 +7,7 @@ from src.env import create_train_env
 from src.model import Mnih2016ActorCriticWithDropout
 AC_NN_MODEL = Mnih2016ActorCriticWithDropout
 
-from src.optimizer import GlobalRMSProp, GlobalAdam
+from src.optimizer import GlobalRMSprop, GlobalAdam
 from src.process import local_train, local_test
 # For the async policies updates
 import torch.multiprocessing as _mp
@@ -21,7 +17,7 @@ import shutil
 def get_args():
     parser = argparse.ArgumentParser(
         """Implementation of model described in the paper: Asynchronous Methods for Deep Reinforcement Learning for Super Mario Bros""")
-    parser.add_argument("--layout", type=str, default=None)
+    parser.add_argument("--layout", type=str, default='atari')
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--gamma', type=float, default=0.99, help='discount factor for rewards')
     parser.add_argument('--tau', type=float, default=1.0, help='parameter for GAE')
@@ -70,7 +66,7 @@ def train(opt):
         else:
             print("Can't load any previous weights for %s! Starting from scratch..." %opt.layout)
     # Define optimizer with shared weights. See 'optimizer.py'
-    optimizer = GlobalAdam(global_model.parameters(), lr=opt.lr)
+    optimizer = GlobalRMSprop(global_model.parameters(), lr=opt.lr)
     # Create async processes
     processes = []
     for index in range(opt.num_processes):

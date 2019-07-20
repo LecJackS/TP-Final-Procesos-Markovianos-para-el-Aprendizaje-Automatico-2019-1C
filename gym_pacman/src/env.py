@@ -1,8 +1,3 @@
-"""
-@author: Viet Nguyen <nhviet1009@gmail.com>
-"""
-
-#import gym_super_mario_bros
 import gym
 import gym_pacman
 
@@ -12,7 +7,9 @@ from gym import Wrapper
 import cv2
 import numpy as np
 import subprocess as sp
-
+import torch
+from torchvision import transforms
+from torchvision.utils import save_image
 
 class Monitor:
     def __init__(self, width, height, saved_path):
@@ -223,35 +220,59 @@ class MinimSkipFrame(Wrapper):
 class SimpleSkipFrame(Wrapper):
     """ Neural network four frame input:
         [T,
-         T+4,
-         T+8,
-         T+12] """
+         T+1,
+         T+2,
+         T+3] """
     def __init__(self, env, skip=4):
         super(SimpleSkipFrame, self).__init__(env)
         self.observation_space = Box(low=0, high=255, shape=(4, 84, 84))
         self.skip = skip
+
+    def preproc_state(self, state):
+        size = (84,84)
+        mean = (0,0,0) #by channel
+        std = (1,1,1)
+        transform = transforms.Compose([
+                        transforms.ToTensor(),
+                        transforms.Normalize(mean, std),
+                        transforms.ToPILImage(),
+                        transforms.Resize(size),
+                        transforms.Grayscale(),
+                        transforms.ToTensor(),
+                        transforms.Normalize([0], [1])
+                    ])
+        return transform(state)[None,:,:,:]
 
     def step(self, action):
         total_reward = 0
         states = []
         #done = self.done
         state, reward, done, info = self.env.step(action)
+        states.append(self.preproc_state(state))
         total_reward += reward
         # we pass states in mini groups of skip=4
-        for i in range(self.skip):
+        for i in range(self.skip-1):
             if not done:
                 state, reward, done, info = self.env.step(action)
+                # state: [H,W,Channel]
                 total_reward += reward
-                states.append(state)
+                states.append(self.preproc_state(state))
             else:
-                states.append(state)
-        states = np.concatenate(states, 0)[None, :, :, :]
-        return states.astype(np.float32), reward, done, info
+                states.append(self.preproc_state(state))
+        #states = np.concatenate(states, 0)[None, :, :, :]
+        #return states.astype(np.float32), total_reward, done, info
+        #states = np.concatenate([state for _ in range(self.skip)], axis=1)
+
+        states = torch.cat(states, dim=1)
+
+        return states, total_reward, done, info
 
     def reset(self):
         state = self.env.reset()
-        states = np.concatenate([state for _ in range(self.skip)], 0)[None, :, :, :]
-        return states.astype(np.float32)
+        p_state = self.preproc_state(state)
+        #states = np.concatenate([p_state for _ in range(self.skip)], axis=1)
+        states = torch.cat([p_state for _ in range(self.skip)], dim=1)
+        return states#.astype(np.float32)
     
 class DQNSkipFrame(Wrapper):
     """ # https://github.com/openai/gym/issues/275
@@ -266,6 +287,21 @@ class DQNSkipFrame(Wrapper):
         self.observation_space = Box(low=0, high=255, shape=(4, 84, 84))
         self.skip = skip
 
+    def preproc_state(self, state):
+        size = (84,84)
+        mean = (0,0,0) #by channel
+        std = (1,1,1)
+        transform = transforms.Compose([
+                        transforms.ToTensor(),
+                        transforms.Normalize(mean, std),
+                        transforms.ToPILImage(),
+                        transforms.Resize(size),
+                        transforms.Grayscale(),
+                        transforms.ToTensor(),
+                        transforms.Normalize([0], [1])
+                    ])
+        return transform(state)[None,:,:,:]
+
     def step(self, action):
         total_reward = 0
         states = []
@@ -279,21 +315,22 @@ class DQNSkipFrame(Wrapper):
                 total_reward += reward
                 # element wise max
                 state = np.maximum(state, state2)
-            states.append(state)
-            for j in range(2):
-                #dummy actions, but we keep track of reward
+            states.append(self.preproc_state(state))
+            for j in range(1):
+                # dummy steps, but we keep track of reward
                 _,reward,done,_ = self.env.step(action)
                 total_reward += reward
-#                 if done:
-#                     break #this dummy loop
-        total_reward /= 12.
-        states = np.concatenate(states, 0)[None, :, :, :]
-        return states.astype(np.float32), total_reward, done, info
+                if done:
+                    break #this dummy loop
+        #total_reward /= 12.
+        states = torch.cat(states, dim=1)
+        return states, total_reward, done, info
 
     def reset(self):
         state = self.env.reset()
-        states = np.concatenate([state for _ in range(self.skip)], 0)[None, :, :, :]
-        return states.astype(np.float32)
+        p_state = self.preproc_state(state)
+        states = torch.cat([p_state for _ in range(self.skip)], dim=1)
+        return states
 
 class CustomSkipFrame(Wrapper):
     def __init__(self, env, skip=4):
@@ -322,11 +359,47 @@ class CustomSkipFrame(Wrapper):
         states = np.concatenate([state for _ in range(self.skip)], 0)[None, :, :, :]
         return states.astype(np.float32)
 
-
-#def create_train_env(world, stage, action_type, output_path=None):
 def create_train_env(layout, output_path=None, index=None):
-    #env = gym_super_mario_bros.make("SuperMarioBros-{}-{}-v0".format(world, stage))
-    #env = gym_pacman.make("PacmanBerkeley-{}-{}-v0".format(world, stage))
+    if True:
+        #print("es atari")
+        env, nInNN, nOutNN = create_train_env_atari(layout, output_path, index)
+    else:
+        #print("es cs188x")
+        env, nInNN, nOutNN = create_train_env_cs188x(layout, output_path, index)
+    return env, nInNN, nOutNN
+
+
+def create_train_env_atari(layout, output_path=None, index=None):
+    if index is not None:
+        print("Process {} - Create train env for {}".format(index, layout))
+    else:
+        print("Getting number of NN inputs/outputs for", layout)
+    env = gym.make('MsPacman-v0')
+    #output_path = 'output/un_video.mp4' # Beware! Can freeze training for some reason.
+    if output_path:
+        #monitor = Monitor(256, 240, output_path)
+        monitor = Monitor(150, 150, output_path)
+    else:
+        monitor = None
+
+    # Pacman Actions https://github.com/Kautenja/nes-py/wiki/Wrap
+    actions = ['NORTH', 'SOUTH', 'EAST', 'WEST', 'NOOP']
+    # Wraps around env:
+    #env = CustomReward(env, monitor)
+    #env = SameReward(env, monitor)
+    #env = CustomSkipFrame(env)
+    env = DQNSkipFrame(env)
+    # Four times same frame input, no skip
+    #env = NoSkipFrame(env)
+    #env = SimpleSkipFrame(env)
+    # Four rotations of same frame input, no skip
+    #env = NoSkipFrameFourRotations(env)
+    #return env, env.observation_space.shape[0], len(actions)
+    num_inputs_to_nn = 4#x84x84
+    num_outputs_from_nn = len(actions)
+    return env, num_inputs_to_nn, num_outputs_from_nn
+
+def create_train_env_cs188x(layout, output_path=None, index=None):
     if index is not None:
         print("Process {} - Create train env for {}".format(index, layout))
     else:

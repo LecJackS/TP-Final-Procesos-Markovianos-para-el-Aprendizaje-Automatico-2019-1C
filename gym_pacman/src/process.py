@@ -1,6 +1,3 @@
-"""
-@author: Viet Nguyen <nhviet1009@gmail.com>
-"""
 import numpy as np
 import torch
 from src.env import create_train_env
@@ -11,12 +8,30 @@ ACTOR_HIDDEN_SIZE=256
 CRITIC_HIDDEN_SIZE=256
 
 import torch.nn.functional as F
+from torchvision import transforms
+from torchvision.utils import save_image
+from PIL import Image
+#import torchvision.transforms as TV
 from torch.distributions import Categorical
 from torch.utils.tensorboard import SummaryWriter
 #from tensorboardX import SummaryWriter
 from collections import deque
 
 import timeit
+
+def preproc_state(np_state):
+    #np_img = np.transpose(np_img[0], (2,0,1)) # [C, H, W]
+    #size = (3,84,84)
+    np_img = np_state[0]
+    pil_img = Image.fromarray(np_img.astype('uint8'))
+
+    t_resize = transforms.Resize((84,84))
+    pil_img = t_resize(pil_img) # [C, 84, 84]
+    t_grayscale = transforms.Grayscale()
+    pil_img = t_grayscale(pil_img)
+    np_img = np.array(pil_img)
+    state = torch.from_numpy(np_img)[None,None,:,:] # [Batch, C, 84, 84]
+    return state.repeat(1,4,1,1).float() #repeat 4 times the frame
 
 def local_train(index, opt, global_model, optimizer, save=False):
     torch.manual_seed(123 + index)
@@ -34,21 +49,30 @@ def local_train(index, opt, global_model, optimizer, save=False):
     # Tell the model we are going to use it for training
     local_model.train()
     # env.reset and get first state
-    state = torch.from_numpy(env.reset())
+    if True:#opt.layout == 'atari':
+        # Reshape image from HxWxC -to-> CxHxW
+        state = env.reset()
+        #state = preproc_state(np_state)
+    else:
+        state = torch.from_numpy(env.reset())
     if opt.use_gpu:
         state = state.cuda()
     done = True
     curr_step = 0
     curr_episode = 0
+    #if index == 0:
+    #    interval = 10
+    #    reward_hist = np.zeros(interval)
     while True:
         if save:
             # Save trained model at save_interval
             if curr_episode % opt.save_interval == 0 and curr_episode > 0:
-
                 torch.save(global_model.state_dict(),
                            "{}/gym-pacman_{}".format(opt.saved_path, opt.layout))
-        print("Process {}. Episode {}   ".format(index, curr_episode), end="\r")
+        if curr_episode%10==0:
+            print("Process {}. Episode {}   ".format(index, curr_episode))
         curr_episode += 1
+        episode_reward = 0
         # Synchronize thread-specific parameters theta'=theta and theta'_v=theta_v
         # (copy global params to local params (after every episode))
         local_model.load_state_dict(global_model.state_dict())
@@ -93,19 +117,49 @@ def local_train(index, opt, global_model, optimizer, save=False):
             # Perform action_t according to policy pi
             # Receive reward r_t and new state s_t+1
             state, reward, done, _ = env.step(action)
+            episode_reward += reward
+            save_snaps=False
+            if save_snaps and index==0:
+                #save animation
+                save_image(state.permute(1,0,2,3), filename='./snaps/process{}-{}.png'.format(index, curr_step),
+                    nrow=1)#,normalize=True)
+
+            # Preprocess state:
+            #state = preproc_state(np_state)
+            # state to tensor
+            #state = torch.from_numpy(state)
             # Render as seen by NN, but with colors 
             if index < opt.num_processes_to_render:
-                env.render(mode = 'human', id=index)
-            # state to tensor
-            state = torch.from_numpy(state)
+                env.render(mode = 'human')
+            
             if opt.use_gpu:
                 state = state.cuda()
-            # If last local step, reset episode
+            # If last global step, reset episode
             if curr_step > opt.num_global_steps:
                 done = True
             if done:
                 curr_step = 0
-                state = torch.from_numpy(env.reset())
+                state = env.reset()
+                #state = preproc_state(np_state)
+                print("Process {:2.0f}. acumR: {}     ".format(index, episode_reward))
+                if index ==0:
+                    # Save history of rewards to compare different agents
+                    # Quiero:
+                    # Que espere 900 juegos
+                    # Guarde los ultimos 100
+                    window_size = 100
+                    total = 200 #900
+                    reward_idx = (curr_episode-1)%total - window_size
+                    # Every 900 episodes, save next 100
+                    if reward_idx >= 0 and reward_idx<window_size:
+                        if reward_idx==0:
+                            reward_hist = np.zeros(window_size)
+                        reward_hist[reward_idx] += episode_reward
+                        if reward_idx == 99:
+                            print("Rewards:", reward_hist)
+                            print("Mean:", np.mean(reward_hist))
+                            print("Median:", np.median(reward_hist))
+                # fin save history
                 if opt.use_gpu:
                     state = state.cuda()
             # Save state-value, log-policy, reward and entropy of
@@ -168,7 +222,8 @@ def local_train(index, opt, global_model, optimizer, save=False):
         total_loss = total_loss.clamp(-max_loss, max_loss)
 
         # Saving logs for TensorBoard
-        writer.add_scalar("Total_{}/Loss".format(index), total_loss, curr_episode)
+        writer.add_scalar("Process_{}/Total_Loss".format(index), total_loss, curr_episode)
+        writer.add_scalar("Process_{}/Acum_Reward".format(index), episode_reward, curr_episode)
         #writer.add_scalar("actor_{}/Loss".format(index), -actor_loss, curr_episode)
         #writer.add_scalar("critic_{}/Loss".format(index), critic_loss, curr_episode)
         #writer.add_scalar("entropyxbeta_{}/Loss".format(index), opt.beta * entropy_loss, curr_episode)

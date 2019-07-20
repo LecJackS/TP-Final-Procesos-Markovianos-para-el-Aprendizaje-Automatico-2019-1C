@@ -1,7 +1,3 @@
-"""
-@author: Viet Nguyen <nhviet1009@gmail.com>
-"""
-
 import torch
 
 class GlobalAdam(torch.optim.Adam):
@@ -10,23 +6,23 @@ class GlobalAdam(torch.optim.Adam):
         for group in self.param_groups:
             for p in group['params']:
                 state = self.state[p]
-                state['step'] = 0
+                state['step'] = torch.zeros(1)
                 state['exp_avg'] = torch.zeros_like(p.data)
                 state['exp_avg_sq'] = torch.zeros_like(p.data)
 
+                #state['step'].share_memory_()
                 state['exp_avg'].share_memory_()
                 state['exp_avg_sq'].share_memory_()
 
-class GlobalRMSProp(torch.optim.RMSprop):
+class GlobalRMSprop(torch.optim.RMSprop):
     # TODO
     def __init__(self, params, lr):
-        super(GlobalRMSProp, self).__init__(params, lr=lr)
+        super(GlobalRMSprop, self).__init__(params, lr=lr)
         for group in self.param_groups:
             for p in group['params']:
                 state = self.state[p]
-                state['step'] = 0
-                state['exp_avg'] = torch.zeros_like(p.data)
-                state['exp_avg_sq'] = torch.zeros_like(p.data)
+                state['step'] = p.data.new().resize_(1).zero_()
+                state['square_avg'] = p.data.new().resize_as_(p.data).zero_()
 
-                state['exp_avg'].share_memory_()
-                state['exp_avg_sq'].share_memory_()
+                state['step'].share_memory_()
+                state['square_avg'].share_memory_()
