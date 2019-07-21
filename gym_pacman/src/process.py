@@ -1,4 +1,5 @@
 import numpy as np
+import queue
 import torch
 from src.env import create_train_env
 
@@ -60,9 +61,11 @@ def local_train(index, opt, global_model, optimizer, save=False):
     done = True
     curr_step = 0
     curr_episode = 0
-    #if index == 0:
-    #    interval = 10
-    #    reward_hist = np.zeros(interval)
+    if index == 1:
+        interval = 100
+        reward_hist = np.zeros(interval)
+        queue_rewards = queue.Queue(maxsize=interval)
+        record_tag = False
     while True:
         if save:
             # Save trained model at save_interval
@@ -142,24 +145,7 @@ def local_train(index, opt, global_model, optimizer, save=False):
                 state = env.reset()
                 #state = preproc_state(np_state)
                 print("Process {:2.0f}. acumR: {}     ".format(index, episode_reward))
-                if index ==0:
-                    # Save history of rewards to compare different agents
-                    # Quiero:
-                    # Que espere 900 juegos
-                    # Guarde los ultimos 100
-                    window_size = 100
-                    total = 200 #900
-                    reward_idx = (curr_episode-1)%total - window_size
-                    # Every 900 episodes, save next 100
-                    if reward_idx >= 0 and reward_idx<window_size:
-                        if reward_idx==0:
-                            reward_hist = np.zeros(window_size)
-                        reward_hist[reward_idx] += episode_reward
-                        if reward_idx == 99:
-                            print("Rewards:", reward_hist)
-                            print("Mean:", np.mean(reward_hist))
-                            print("Median:", np.median(reward_hist))
-                # fin save history
+
                 if opt.use_gpu:
                     state = state.cuda()
             # Save state-value, log-policy, reward and entropy of
@@ -172,6 +158,21 @@ def local_train(index, opt, global_model, optimizer, save=False):
             if done:
                 # All local steps done.
                 break
+        # Save history every n episodes as statistics (just from one process)
+        if index==1: #not zero so its not the slower one from rendering
+            if record_tag:
+                reward_hist[hist_idx] = episode_reward
+                hist_idx += 1
+            if curr_episode % 200 == 0:
+                record_tag = False
+                print("Final records:")
+                print("Rewards:", reward_hist)
+                print("Mean:", np.mean(reward_hist))
+                print("Median:", np.median(reward_hist))
+            elif curr_episode % 100 == 0:
+                record_tag = True
+                hist_idx = 0
+        # fin save history
         # Baseline rewards standarization over episode rewards.
         # Uncomment prints to see how rewards change
         # Should I
