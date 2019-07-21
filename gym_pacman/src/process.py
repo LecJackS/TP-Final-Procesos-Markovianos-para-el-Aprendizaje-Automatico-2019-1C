@@ -165,10 +165,12 @@ def local_train(index, opt, global_model, optimizer, save=False):
                 hist_idx += 1
             if curr_episode % 200 == 0:
                 record_tag = False
-                print("Final records:")
+                print("Final statistics:")
                 print("Rewards:", reward_hist)
                 print("Mean:", np.mean(reward_hist))
                 print("Median:", np.median(reward_hist))
+                print("StD:", np.std(reward_hist))
+                print("(med-mean)/std:", (np.median(reward_hist)-np.mean(reward_hist))/np.std(reward_hist))
             elif curr_episode % 100 == 0:
                 record_tag = True
                 hist_idx = 0
