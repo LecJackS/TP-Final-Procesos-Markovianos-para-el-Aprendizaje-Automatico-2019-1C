@@ -1,7 +1,3 @@
-"""
-@author: Viet Nguyen <nhviet1009@gmail.com>
-"""
-
 import os
 
 os.environ['OMP_NUM_THREADS'] = '1'

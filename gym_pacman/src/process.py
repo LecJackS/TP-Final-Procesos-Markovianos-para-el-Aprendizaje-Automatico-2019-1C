@@ -1,16 +1,19 @@
-"""
-@author: Viet Nguyen <nhviet1009@gmail.com>
-"""
 import numpy as np
+import queue
 import torch
 from src.env import create_train_env
 
-from src.model import Mnih2016ActorCriticWithDropout
-AC_NN_MODEL = Mnih2016ActorCriticWithDropout
+from src.model import Mnih2016ActorCriticWithDropout, SimpleActorCriticWithDropout
+#AC_NN_MODEL = Mnih2016ActorCriticWithDropout
+AC_NN_MODEL = SimpleActorCriticWithDropout
 ACTOR_HIDDEN_SIZE=256
 CRITIC_HIDDEN_SIZE=256
 
 import torch.nn.functional as F
+from torchvision import transforms
+from torchvision.utils import save_image
+from PIL import Image
+#import torchvision.transforms as TV
 from torch.distributions import Categorical
 from torch.utils.tensorboard import SummaryWriter
 #from tensorboardX import SummaryWriter
@@ -18,13 +21,28 @@ from collections import deque
 
 import timeit
 
+def preproc_state(np_state):
+    #np_img = np.transpose(np_img[0], (2,0,1)) # [C, H, W]
+    #size = (3,84,84)
+    np_img = np_state[0]
+    pil_img = Image.fromarray(np_img.astype('uint8'))
+
+    t_resize = transforms.Resize((84,84))
+    pil_img = t_resize(pil_img) # [C, 84, 84]
+    t_grayscale = transforms.Grayscale()
+    pil_img = t_grayscale(pil_img)
+    np_img = np.array(pil_img)
+    state = torch.from_numpy(np_img)[None,None,:,:] # [Batch, C, 84, 84]
+    return state.repeat(1,4,1,1).float() #repeat 4 times the frame
+
 def local_train(index, opt, global_model, optimizer, save=False):
     torch.manual_seed(123 + index)
     if save:
         start_time = timeit.default_timer()
-    # Path for tensorboard log
-    process_log_path = "{}/process-{}".format(opt.log_path, index)
-    writer = SummaryWriter(process_log_path)#, max_queue=1000, flush_secs=10)
+    if index==0:
+        # Path for tensorboard log
+        process_log_path = "{}/process-{}".format(opt.log_path, index)
+        writer = SummaryWriter(process_log_path)#, max_queue=1000, flush_secs=10)
     # Creates training environment for this particular process
     env, num_states, num_actions = create_train_env(opt.layout, index=index)
     # local_model keeps local weights for each async process
@@ -34,21 +52,32 @@ def local_train(index, opt, global_model, optimizer, save=False):
     # Tell the model we are going to use it for training
     local_model.train()
     # env.reset and get first state
-    state = torch.from_numpy(env.reset())
+    if True:#opt.layout == 'atari':
+        # Reshape image from HxWxC -to-> CxHxW
+        state = env.reset()
+        #state = preproc_state(np_state)
+    else:
+        state = torch.from_numpy(env.reset())
     if opt.use_gpu:
         state = state.cuda()
     done = True
     curr_step = 0
     curr_episode = 0
+    if index == 0:
+        interval = 100
+        reward_hist = np.zeros(interval)
+        #queue_rewards = queue.Queue(maxsize=interval)
+        record_tag = False
     while True:
         if save:
             # Save trained model at save_interval
             if curr_episode % opt.save_interval == 0 and curr_episode > 0:
-
                 torch.save(global_model.state_dict(),
                            "{}/gym-pacman_{}".format(opt.saved_path, opt.layout))
-        print("Process {}. Episode {}   ".format(index, curr_episode), end="\r")
+        if curr_episode%10==0:
+            print("Process {}. Episode {}   ".format(index, curr_episode))
         curr_episode += 1
+        episode_reward = 0
         # Synchronize thread-specific parameters theta'=theta and theta'_v=theta_v
         # (copy global params to local params (after every episode))
         local_model.load_state_dict(global_model.state_dict())
@@ -93,19 +122,32 @@ def local_train(index, opt, global_model, optimizer, save=False):
             # Perform action_t according to policy pi
             # Receive reward r_t and new state s_t+1
             state, reward, done, _ = env.step(action)
+            episode_reward += reward
+            save_snaps=False
+            if save_snaps and index==0:
+                #save animation
+                save_image(state.permute(1,0,2,3), filename='./snaps/process{}-{}.png'.format(index, curr_step),
+                    nrow=1)#,normalize=True)
+
+            # Preprocess state:
+            #state = preproc_state(np_state)
+            # state to tensor
+            #state = torch.from_numpy(state)
             # Render as seen by NN, but with colors 
             if index < opt.num_processes_to_render:
-                env.render(mode = 'human', id=index)
-            # state to tensor
-            state = torch.from_numpy(state)
+                env.render(mode = 'human')
+            
             if opt.use_gpu:
                 state = state.cuda()
-            # If last local step, reset episode
+            # If last global step, reset episode
             if curr_step > opt.num_global_steps:
                 done = True
             if done:
                 curr_step = 0
-                state = torch.from_numpy(env.reset())
+                state = env.reset()
+                #state = preproc_state(np_state)
+                print("Process {:2.0f}. acumR: {}     ".format(index, episode_reward))
+
                 if opt.use_gpu:
                     state = state.cuda()
             # Save state-value, log-policy, reward and entropy of
@@ -118,6 +160,48 @@ def local_train(index, opt, global_model, optimizer, save=False):
             if done:
                 # All local steps done.
                 break
+        # Save history every n episodes as statistics (just from one process)
+        if index==0: #not zero so its not the slower one from rendering
+            sample_size = 100
+            hist_idx = (curr_episode - 1)%sample_size
+            if hist_idx==0:
+                reward_hist = np.zeros(sample_size)
+            reward_hist[hist_idx] = episode_reward
+            if hist_idx==sample_size-1:
+                writer.add_scalar("Process_{}/Last100Statistics_mean".format(index), np.mean(reward_hist), curr_episode)
+                writer.add_scalar("Process_{}/Last100Statistics_median".format(index), np.median(reward_hist), curr_episode)
+                writer.add_scalar("Process_{}/Last100Statistics_std".format(index), np.std(reward_hist), curr_episode)
+                stand_median = (np.median(reward_hist)-np.mean(reward_hist))/np.std(reward_hist)
+                writer.add_scalar("Process_{}/Last100Statistics_stand_median".format(index), stand_median, curr_episode)
+
+                print("Final statistics:")
+                print("Rewards:", reward_hist)
+                print("Mean:", np.mean(reward_hist))
+                print("Median:", np.median(reward_hist))
+                print("StD:", np.std(reward_hist))
+                print("(med-mean)/std:", stand_median)
+            #if record_tag:
+            #    reward_hist[hist_idx] = episode_reward
+            #    hist_idx += 1
+            #if curr_episode % 200 == 0:
+            #    record_tag = False
+            #    writer.add_scalar("Process_{}/Last100Statistics_mean".format(index), np.mean(reward_hist), curr_episode)
+            #    writer.add_scalar("Process_{}/Last100Statistics_median".format(index), np.median(reward_hist), curr_episode)
+            #    writer.add_scalar("Process_{}/Last100Statistics_std".format(index), np.std(reward_hist), curr_episode)
+            #    stand_median = (np.median(reward_hist)-np.mean(reward_hist))/np.std(reward_hist)
+            #    writer.add_scalar("Process_{}/Last100Statistics_stand_median".format(index), stand_median, curr_episode)
+
+            #    print("Final statistics:")
+            #    print("Rewards:", reward_hist)
+            #    print("Mean:", np.mean(reward_hist))
+            #    print("Median:", np.median(reward_hist))
+             #   print("StD:", np.std(reward_hist))
+
+            #    print("(med-mean)/std:", stand_median)
+            #elif curr_episode % 100 == 0:
+            #    record_tag = True
+            #    hist_idx = 0
+        # fin save history
         # Baseline rewards standarization over episode rewards.
         # Uncomment prints to see how rewards change
         # Should I
@@ -168,10 +252,12 @@ def local_train(index, opt, global_model, optimizer, save=False):
         total_loss = total_loss.clamp(-max_loss, max_loss)
 
         # Saving logs for TensorBoard
-        writer.add_scalar("Total_{}/Loss".format(index), total_loss, curr_episode)
-        #writer.add_scalar("actor_{}/Loss".format(index), -actor_loss, curr_episode)
-        #writer.add_scalar("critic_{}/Loss".format(index), critic_loss, curr_episode)
-        #writer.add_scalar("entropyxbeta_{}/Loss".format(index), opt.beta * entropy_loss, curr_episode)
+        if index==0:
+            writer.add_scalar("Process_{}/Total_Loss".format(index), total_loss, curr_episode)
+            writer.add_scalar("Process_{}/Acum_Reward".format(index), episode_reward, curr_episode)
+            #writer.add_scalar("actor_{}/Loss".format(index), -actor_loss, curr_episode)
+            #writer.add_scalar("critic_{}/Loss".format(index), critic_loss, curr_episode)
+            #writer.add_scalar("entropyxbeta_{}/Loss".format(index), opt.beta * entropy_loss, curr_episode)
         # Gradientes a cero
         optimizer.zero_grad()
         # Backward pass
@@ -189,7 +275,8 @@ def local_train(index, opt, global_model, optimizer, save=False):
         # Final del training
         if curr_episode == int(opt.num_global_steps / opt.num_local_steps):
             print("Training process {} terminated".format(index))
-            writer.close()
+            if index==0:
+                writer.close()
             if save:
                 end_time = timeit.default_timer()
                 print('The code runs for %.2f s ' % (end_time - start_time))

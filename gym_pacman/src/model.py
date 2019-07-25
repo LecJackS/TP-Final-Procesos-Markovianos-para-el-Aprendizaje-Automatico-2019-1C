@@ -1,10 +1,64 @@
-"""
-@author: Viet Nguyen <nhviet1009@gmail.com>
-"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 # PyTorch input tensor : [batch_size, channel, height, width]
+
+class SimpleActorCriticWithDropout(nn.Module):
+    """Same as Mnih2016ActorCritic but with dropout layers for each layer"""
+    def __init__(self, num_inputs, num_actions):
+        super(SimpleActorCriticWithDropout, self).__init__()
+        self.p_drop = 0.0
+        self.p_drop_conv = 0.0
+        self.conv1_drop = nn.Dropout2d(p=self.p_drop_conv)
+        self.conv1      = nn.Conv2d(num_inputs, 16, 8, stride=4) #no padding
+        self.conv2_drop = nn.Dropout2d(p=self.p_drop_conv)
+        self.conv2      = nn.Conv2d(16, 32, 4, stride=2)
+        # Model Representation
+        #self.lstm = nn.LSTMCell(32 * 9 * 9, 256)
+        self.linear = nn.Linear(32 * 9 * 9, 256)
+        # Outputs
+        self.actor_drop    = nn.Dropout(p=self.p_drop)
+        self.actor_linear  = nn.Linear(256, num_actions)
+        self.critic_drop   = nn.Dropout(p=self.p_drop)
+        self.critic_linear = nn.Linear(256, 1)
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                # nn.init.kaiming_uniform_(module.weight)
+                nn.init.constant_(module.bias, 0)
+            #elif isinstance(module, nn.LSTMCell):
+                #nn.init.constant_(module.bias_ih, 0)
+                #nn.init.constant_(module.bias_hh, 0)
+
+    def forward(self, x, hx, cx):
+        # Dropout after relu for convnets
+        #mipal.snu.ac.kr/images/1/16/Dropout_ACCV2016.pdf
+        x = self.conv1_drop(F.relu(self.conv1(x)))
+        x = self.conv2_drop(F.relu(self.conv2(x)))
+        #hx, cx = self.lstm(x.view(x.size(0), -1), (hx, cx))
+        # to flatten all filters: x.view(x.size(0), -1)
+        x = F.relu(self.linear(x.view(x.size(0), -1)))
+        # Softmax is applied later, same with log-softmax
+        actor  = self.actor_drop(self.actor_linear(x))
+        critic = self.critic_drop(self.critic_linear(x))
+        # Uncomment to print forward values
+        #print("Actor: " , actor)
+        #print("Critic: ", critic)
+        use_dropout = False
+        if use_dropout:
+            # Changes dropout rate every forward pass
+            min_drop = 0.0
+            max_drop_conv   = 0.2
+            max_drop_linear = 0.6
+            random_dropout_rate_conv   = torch.FloatTensor(1).uniform_(min_drop, max_drop_conv).item()
+            random_dropout_rate_linear = torch.FloatTensor(1).uniform_(min_drop, max_drop_linear).item()
+            self.p_drop_conv   = random_dropout_rate_conv
+            self.p_drop_linear = random_dropout_rate_linear
+        return actor, critic, hx, cx
+
 
 class Mnih2016ActorCriticWithDropout(nn.Module):
     """Same as Mnih2016ActorCritic but with dropout layers for each layer"""
@@ -47,7 +101,7 @@ class Mnih2016ActorCriticWithDropout(nn.Module):
         # Uncomment to print forward values
         #print("Actor: " , actor)
         #print("Critic: ", critic)
-        use_dropout = False
+        use_dropout = True
         if use_dropout:
             # Changes dropout rate every forward pass
             min_drop = 0.0
