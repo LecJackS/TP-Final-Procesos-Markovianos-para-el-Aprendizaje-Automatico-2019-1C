@@ -1,5 +1,10 @@
 ### TP-Final-Procesos-Markovianos-para-el-Aprendizaje-Automatico-2019-1C
-Continues from here: https://github.com/LecJackS/Procesos-Markovianos-Para-el-Aprendizaje-Automatico-2019-1C/
+
+#### Without junk files:
+https://github.com/LecJackS/TP-Final-Procesos-Markovianos-para-el-Aprendizaje-Automatico-2019-1C-w.o.heavy-history-
+
+
+Continues from this repo: https://github.com/LecJackS/Procesos-Markovianos-Para-el-Aprendizaje-Automatico-2019-1C/
 
 ### Very Quick Roadmap to
 # Asynchronous Advantage Actor Critic (A3C)
