@@ -4,8 +4,8 @@ import torch
 from src.env import create_train_env
 
 from src.model import Mnih2016ActorCriticWithDropout, SimpleActorCriticWithDropout
-#AC_NN_MODEL = Mnih2016ActorCriticWithDropout
-AC_NN_MODEL = SimpleActorCriticWithDropout
+AC_NN_MODEL = Mnih2016ActorCriticWithDropout
+#AC_NN_MODEL = SimpleActorCriticWithDropout
 ACTOR_HIDDEN_SIZE=256
 CRITIC_HIDDEN_SIZE=256
 
@@ -36,7 +36,7 @@ def preproc_state(np_state):
     return state.repeat(1,4,1,1).float() #repeat 4 times the frame
 
 def local_train(index, opt, global_model, optimizer, save=False):
-    torch.manual_seed(123 + index)
+    torch.manual_seed(42 + index)
     if save:
         start_time = timeit.default_timer()
     if index==0:
@@ -65,7 +65,8 @@ def local_train(index, opt, global_model, optimizer, save=False):
     curr_episode = 0
     if index == 0:
         interval = 100
-        reward_hist = np.zeros(interval)
+        #reward_hist = np.zeros(interval)
+        reward_hist = deque(maxlen=100)
         #queue_rewards = queue.Queue(maxsize=interval)
         record_tag = False
     while True:
@@ -80,7 +81,7 @@ def local_train(index, opt, global_model, optimizer, save=False):
         episode_reward = 0
         # Synchronize thread-specific parameters theta'=theta and theta'_v=theta_v
         # (copy global params to local params (after every episode))
-        local_model.load_state_dict(global_model.state_dict())
+        local_model.load_state_dict(global_model.state_dict(), strict=True)
         # Follow gradients only after 'done' (end of episode)
         if done:
             h_0 = torch.zeros((1, ACTOR_HIDDEN_SIZE), dtype=torch.float)
@@ -103,6 +104,8 @@ def local_train(index, opt, global_model, optimizer, save=False):
             # * Action prediction (Policy function) -> logits (array with every action-value)
             # * Value prediction (Value function)   -> value (single value state-value)
             logits, value, h_0, c_0 = local_model(state, h_0, c_0)
+            # Simple estimation: between(-1,1)
+            value.clamp(-1.,1.)
             # Softmax over action-values
             policy = F.softmax(logits, dim=1)
             # Log-softmax over action-values, to get the entropy of the policy
@@ -123,11 +126,11 @@ def local_train(index, opt, global_model, optimizer, save=False):
             # Receive reward r_t and new state s_t+1
             state, reward, done, _ = env.step(action)
             episode_reward += reward
-            save_snaps=False
-            if save_snaps and index==0:
-                #save animation
-                save_image(state.permute(1,0,2,3), filename='./snaps/process{}-{}.png'.format(index, curr_step),
-                    nrow=1)#,normalize=True)
+            if opt.record and index==0:
+                #save animation for each four-frame input
+                save_image(state.permute(1,0,2,3),
+                           filename='./snaps/process{}-{}.png'.format(index, curr_step),
+                           nrow=1)#,normalize=True)
 
             # Preprocess state:
             #state = preproc_state(np_state)
@@ -161,25 +164,30 @@ def local_train(index, opt, global_model, optimizer, save=False):
                 # All local steps done.
                 break
         # Save history every n episodes as statistics (just from one process)
-        if index==0: #not zero so its not the slower one from rendering
-            sample_size = 100
-            hist_idx = (curr_episode - 1)%sample_size
-            if hist_idx==0:
-                reward_hist = np.zeros(sample_size)
-            reward_hist[hist_idx] = episode_reward
-            if hist_idx==sample_size-1:
-                writer.add_scalar("Process_{}/Last100Statistics_mean".format(index), np.mean(reward_hist), curr_episode)
-                writer.add_scalar("Process_{}/Last100Statistics_median".format(index), np.median(reward_hist), curr_episode)
-                writer.add_scalar("Process_{}/Last100Statistics_std".format(index), np.std(reward_hist), curr_episode)
-                stand_median = (np.median(reward_hist)-np.mean(reward_hist))/np.std(reward_hist)
+        if index==0: 
+            #sample_size = 100
+            # hist_idx = (curr_episode - 1)%sample_size
+            # if hist_idx==0:
+            #     reward_hist = np.zeros(sample_size)
+            # reward_hist[hist_idx] = episode_reward
+            reward_hist.append(episode_reward)
+            if True:#hist_idx==sample_size-1:
+                r_mean   = np.mean(reward_hist)
+                r_median = np.median(reward_hist)
+                r_std    = np.std(reward_hist)
+                stand_median = (r_median - r_mean) / (r_std + 1e-9)
+                writer.add_scalar("Process_{}/Last100Statistics_mean".format(index), r_mean, curr_episode)
+                writer.add_scalar("Process_{}/Last100Statistics_median".format(index), r_median, curr_episode)
+                writer.add_scalar("Process_{}/Last100Statistics_std".format(index), r_std, curr_episode)
+                #stand_median = (np.median(reward_hist)-np.mean(reward_hist))/np.std(reward_hist)
                 writer.add_scalar("Process_{}/Last100Statistics_stand_median".format(index), stand_median, curr_episode)
 
-                print("Final statistics:")
-                print("Rewards:", reward_hist)
-                print("Mean:", np.mean(reward_hist))
-                print("Median:", np.median(reward_hist))
-                print("StD:", np.std(reward_hist))
-                print("(med-mean)/std:", stand_median)
+                # print("Final statistics:")
+                # print("Rewards:", reward_hist)
+                # print("Mean:", np.mean(reward_hist))
+                # print("Median:", np.median(reward_hist))
+                # print("StD:", np.std(reward_hist))
+                # print("(med-mean)/std:", stand_median)
             #if record_tag:
             #    reward_hist[hist_idx] = episode_reward
             #    hist_idx += 1
@@ -243,13 +251,13 @@ def local_train(index, opt, global_model, optimizer, save=False):
             critic_loss = critic_loss + ((R - value)**2) / 2.
             entropy_loss = entropy_loss + entropy
         # Clamp critic loss value if too big
-        max_critic_loss = 1./opt.lr
-        critic_loss = critic_loss.clamp(-max_critic_loss, max_critic_loss)
+        #max_critic_loss = 1./opt.lr
+        #critic_loss = critic_loss.clamp(-max_critic_loss, max_critic_loss)
         # Total process' loss
         total_loss = -actor_loss + critic_loss - opt.beta * entropy_loss
         # Clamp loss value if too big
-        max_loss =  2 * max_critic_loss
-        total_loss = total_loss.clamp(-max_loss, max_loss)
+        #max_loss =  2 * max_critic_loss
+        #total_loss = total_loss.clamp(-max_loss, max_loss)
 
         # Saving logs for TensorBoard
         if index==0:
@@ -285,7 +293,7 @@ def local_train(index, opt, global_model, optimizer, save=False):
 
 
 def local_test(index, opt, global_model):
-    torch.manual_seed(123 + index)
+    torch.manual_seed(42 + index)
     env, num_states, num_actions = create_train_env(opt.layout, index=index)
     local_model = AC_NN_MODEL(num_states, num_actions)
     # Test model we are going to test (turn off dropout, no backward pass)
@@ -297,7 +305,8 @@ def local_test(index, opt, global_model):
     while True:
         curr_step += 1
         if done:
-            local_model.load_state_dict(global_model.state_dict())
+            # Copy global model to local model
+            local_model.load_state_dict(global_model.state_dict(), strict=False)
         with torch.no_grad():
             if done:
                 h_0 = torch.zeros((1, ACTOR_HIDDEN_SIZE), dtype=torch.float)
@@ -307,6 +316,8 @@ def local_test(index, opt, global_model):
                 c_0 = c_0.detach()
 
         logits, value, h_0, c_0 = local_model(state, h_0, c_0)
+        # Simple estimation: between(-1,1)
+        value.clamp(-1.,1.)
         policy = F.softmax(logits, dim=1)
         action = torch.argmax(policy).item()
         state, reward, done, _ = env.step(action)

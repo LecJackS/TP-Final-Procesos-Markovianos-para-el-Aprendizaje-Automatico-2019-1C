@@ -10,3 +10,9 @@ gym_pacman/gym_pacman.egg-info
 !./gym_pacman/trained_models/.gitkeep
 !./gym_pacman/tensorboard/.gitkeep
 gym_pacman/src/__pycache__/
+
+gym_pacman/snaps/
+
+gym_pacman/snaps \(copy\)/
+
+gym_pacman/__pycache__/

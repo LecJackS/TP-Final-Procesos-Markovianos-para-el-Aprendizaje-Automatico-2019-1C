@@ -1,13 +1,13 @@
 {
     "min_nghosts": 0, 
-    "max_nghosts": 1, 
+    "max_nghosts": 3, 
     "min_npellets": 1,
-    "max_npellets": 1,
-    "by_proportion": false,
-    "min_food_proportion": 0.5,
-    "max_food_proportion": 0.5,
+    "max_npellets": 10,
+    "by_proportion": true,
+    "min_food_proportion": 0.3,
+    "max_food_proportion": 0.7,
     "min_ghost_distance": 4,
-    "min_size": 8,
-    "max_size": 8,
+    "min_size": 14,
+    "max_size": 14,
     "decimate": 1.0
 }

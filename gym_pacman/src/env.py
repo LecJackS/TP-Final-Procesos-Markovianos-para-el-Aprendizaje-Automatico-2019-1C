@@ -57,11 +57,34 @@ class SameReward(Wrapper):
 class UnitReward(Wrapper):
     def __init__(self, env=None, monitor=None):
         super(UnitReward, self).__init__(env)
-        self.observation_space = Box(low=0, high=255, shape=(1, 84, 84))
+        #self.observation_space = Box(low=0, high=255, shape=(1, 84, 84))
         
     def step(self, action):
         state, reward, done, info = self.env.step(action)
         # Process frame to 84x84px grayscale 
+        #print("info:", info)
+        #reward = info["score"]
+        if reward > 0:
+            reward = 1.
+        elif reward ==0:
+            reward = 0.
+        else:
+            #reward < 0
+            reward = -1.
+        #print("\naction:",action,"  reward:", reward)
+        #print(info, "\n")
+        return state, reward, done, info
+
+    #def reset(self):
+    #    return process_frame(self.env.reset())
+class UnitReward_cs188x(Wrapper):
+    def __init__(self, env=None, monitor=None):
+        super(UnitReward_cs188x, self).__init__(env)
+        #self.observation_space = Box(low=0, high=255, shape=(1, 84, 84))
+        
+    def step(self, action):
+        state, reward, done, info = self.env.step(action)
+         
         #print("info:", info)
         if reward > 0:
             reward = 1.
@@ -73,7 +96,6 @@ class UnitReward(Wrapper):
 
     #def reset(self):
     #    return process_frame(self.env.reset())
-
 class CustomReward(Wrapper):
     def __init__(self, env=None, monitor=None):
         super(CustomReward, self).__init__(env)
@@ -148,29 +170,149 @@ class NoSkipFrameFourRotations(Wrapper):
          rot270(T)] """
     def __init__(self, env, skip=4):
         super(NoSkipFrameFourRotations, self).__init__(env)
-        self.observation_space = Box(low=0, high=255, shape=(4, 84, 84))
-        self.skip = skip
+        #self.observation_space = Box(low=0, high=255, shape=(4, 84, 84))
+        #self.skip = skip
+
+    def preproc_state(self, state):
+        size = (84,84)
+        #https://cs231n.github.io/neural-networks-2/#datapre
+        mean = (0,0,0) #by channel
+        std = (1,1,1)
+        mean=[0.485, 0.456, 0.406]
+        std =[0.229, 0.224, 0.225]
+        # For whitening
+        # compute the covariance
+        #X = state.reshape(-1, 3*84*84)
+        #print(X.size())
+        #print(X.data)
+        #cov = np.cov(X.numpy(), rowvar=False)   # cov is (N, N)
+        #print(np.shape(cov))
+        # singular value decomposition
+        #U, S, V = torch.svd(torch.from_numpy(cov))     # U is (N, N), S is (N,1) V is (N,N)
+        # build the ZCA matrix which is (N,N)
+        #epsilon = 1e-5
+        #zca_matrix = np.dot(U, np.dot(np.diag(1.0/np.sqrt(S + epsilon)), U.T))
+        transform = transforms.Compose([
+                        #transforms.ToTensor(),
+                        transforms.Normalize(mean, std),
+                        #transforms.LinearTransformation(zca_matrix),
+                        transforms.ToPILImage(),
+                        transforms.Resize(size),
+                        transforms.Grayscale(),
+                        transforms.ToTensor(),
+                        transforms.Normalize([0], [1])
+                    ])
+        return transform(state)[None,:,:,:]
 
     def step(self, action):
         states = []
         #done = self.done
         state, reward, done, info = self.env.step(action)
+
         # we need a four channel input 
         # We'll get all four rotations of current fram
         # TODO: mirroring horizontal and diagonal (4 more)
-        states.append(state)
-        times = 3 # instead of copies, do transformations! <<<  TODO/ DONE! :)
+        # Process frame to 84x84px grayscale, to Tensor
+        state = torch.from_numpy(state).permute(2,0,1).float()
+        states.append(self.preproc_state(state))
+        times = 3 # transformations!
         for t in range(1, times+1):
             # rotate +90 degrees each frame 
-            states.append(np.rot90(state, t, axes=(1, 2)))
-        states = np.concatenate(states, 0)[None, :, :, :]
-        return states.astype(np.float32), reward, done, info
+            states.append(self.preproc_state(torch.rot90(state, t, dims=(1, 2))))
+        #states = np.concatenate(states, 0)[None, :, :, :]
+        states = torch.cat(states, dim=1)
+        return states, reward, done, info
     
     def reset(self):
-        state = self.env.reset()
-        states = np.concatenate([state for _ in range(self.skip)], 0)[None, :, :, :]
-        return states.astype(np.float32)
+        state  = self.env.reset()
+        state = torch.from_numpy(state).permute(2,0,1).float()
+        states = []
+        states.append(self.preproc_state(state))
+        times = 3
+        for t in range(1, times+1):
+            # rotate +90 degrees each frame 
+            states.append(self.preproc_state(torch.rot90(state, t, dims=(1, 2))))
+        #states = np.concatenate(states, 0)[None, :, :, :]
+        states = torch.cat(states, dim=1)
+        return states
+
+class NoSkipFrameColourFourRotations(Wrapper):
+    """ Neural network four frame input:
+        [T,
+         rot90(T),
+         rot180(T),
+         rot270(T)] """
+    def init(self, env, skip=4):
+        super(NoSkipFrameColourFourRotations, self).init(env)
+        #self.observation_space = Box(low=0, high=255, shape=(4, 84, 84))
+        #self.skip = skip
+        size = (84,84)
+        #https://cs231n.github.io/neural-networks-2/#datapre
+        mean = [0,0,0] #by channel
+        std = [1,1,1]
+        mean=[0.485, 0.456, 0.406]
+        std =[0.229, 0.224, 0.225]
+        # TODO: whitening
+        self.transform_gray = transforms.Compose([
+                        #transforms.ToTensor(),
+                        transforms.Normalize([0,0,0], [3,3,3]),
+                        transforms.ToPILImage(),
+                        #transforms.ColorJitter(brightness=[2,2], contrast=[2,2]),
+                        transforms.Resize(size, interpolation=2),
+                        transforms.Grayscale(),
+                        transforms.ToTensor(),
+                        transforms.Normalize([0],[1])
+                    ])
+        self.transform_colour = transforms.Compose([
+                        #transforms.ToTensor(),
+                        transforms.Normalize([0,0,0], [3,3,3]),
+                        transforms.ToPILImage(),
+                        #transforms.ColorJitter(brightness=[2,2], contrast=[2,2]),
+                        transforms.Resize(size, interpolation=2),
+                        #transforms.Grayscale(),
+                        transforms.ToTensor(),
+                        transforms.Normalize([0,0,0], [1,1,1])
+                    ])
+    def preproc_state(self, state, cha):
+        if cha==3:
+            return self.transform_gray(state)[None,:,:,:]
+        else:
+            # Colour channels 0, 1 and 2
+            tran_state = self.transform_colour(state)[cha,:,:]
+            return tran_state[None,None,:,:]
+
+    def step(self, action):
+        states = []
+        #done = self.done
+        state, reward, done, info = self.env.step(action)
+
+        # we need a four channel input 
+        # We'll get all four rotations of current fram
+        # TODO: mirroring horizontal and diagonal (4 more)
+        # Process frame to 84x84px grayscale, to Tensor
+        state = torch.from_numpy(state).permute(2,0,1).float()
+        states.append(self.preproc_state(state, cha=0))
+        times = 3 # transformations!
+        for t in range(1, times+1):
+            # rotate +90 degrees each frame 
+            states.append(self.preproc_state(torch.rot90(state, t, dims=(1, 2)), cha=t))
+        #states = np.concatenate(states, 0)[None, :, :, :]
+        states = torch.cat(states, dim=1)
+        return states, reward, done, info
     
+    def reset(self):
+        state  = self.env.reset()
+        state = torch.from_numpy(state).permute(2,0,1).float()
+        states = []
+        states.append(self.preproc_state(state, cha=0))
+        times = 3
+        for t in range(1, times+1):
+            # rotate +90 degrees each frame 
+            states.append(self.preproc_state(torch.rot90(state, t, dims=(1, 2)), cha=t))
+        #states = np.concatenate(states, 0)[None, :, :, :]
+        states = torch.cat(states, dim=1)
+        return states
+
 class MinimSkipFrame(Wrapper):
     """ Neural network four frame input:
         [T,
@@ -308,9 +450,9 @@ class DQNSkipFrame(Wrapper):
                 # element wise max
                 state = np.maximum(state, state2)
             states.append(self.preproc_state(state))
-            for j in range(1):
+            for j in range(0):
                 # dummy steps, but we keep track of reward
-                _,reward,done,_ = self.env.step(action)
+                _, reward, done, _ = self.env.step(action)
                 total_reward += reward
                 if done:
                     break #this dummy loop
@@ -322,6 +464,83 @@ class DQNSkipFrame(Wrapper):
         state = self.env.reset()
         p_state = self.preproc_state(state)
         states = torch.cat([p_state for _ in range(self.skip)], dim=1)
+        return states
+
+class DQNColourSkipFrame(Wrapper):
+    """ # https://github.com/openai/gym/issues/275
+        # (tried to be) implemented by jack 
+        Neural network four frame input:
+        [max(T-1,  T),
+         max(T+3,  T+4),
+         max(T+7,  T+8),
+         max(T+11, T+12)] """
+    def __init__(self, env, skip=4):
+        super(DQNColourSkipFrame, self).__init__(env)
+        #self.observation_space = Box(low=0, high=255, shape=(4, 84, 84))
+        self.skip = skip
+        # define transformation
+        size = (84,84)
+        mean = (0,0,0) #by channel
+        std = (1,1,1)
+        self.transform_gray = transforms.Compose([
+                        transforms.ToTensor(),
+                        transforms.Normalize(mean, std),
+                        transforms.ToPILImage(),
+                        transforms.Resize(size),
+                        transforms.Grayscale(),
+                        transforms.ToTensor(),
+                        transforms.Normalize([0], [1])
+                    ])
+        self.transform_colour = transforms.Compose([
+                        transforms.ToTensor(),
+                        transforms.Normalize(mean, std),
+                        transforms.ToPILImage(),
+                        transforms.Resize(size),
+                        transforms.ToTensor(),
+                        transforms.Normalize(mean, std)
+                    ])
+
+    def preproc_state(self, state, cha):
+        # Color ch1
+        if cha==3:
+            # Grayscale state
+            #print('canal gray')
+            return self.transform_gray(state)[None,:,:,:]
+        else:
+            # loop over colour channels 0,1,2
+            #print('canal de color')
+            tran_state = self.transform_colour(state)[cha,:,:]
+            return tran_state[None,None,:,:]
+
+    def step(self, action):
+        total_reward = 0
+        states = []
+
+        # we pass states in mini groups of skip=4
+        for idx in range(self.skip):
+            state, reward, done, info = self.env.step(action)
+            total_reward += reward
+            if not done:
+                state2, reward, done, info = self.env.step(action)
+                total_reward += reward
+                # element wise max
+                state = np.maximum(state, state2)
+            states.append(self.preproc_state(state, idx))
+            # for j in range(0):
+            #     # dummy steps, but we keep track of reward
+            #     _, reward, done, _ = self.env.step(action)
+            #     total_reward += reward
+            #     if done:
+            #         break #this dummy loop
+        #total_reward /= 12.
+        states = torch.cat(states, dim=1)
+        return states, total_reward, done, info
+
+    def reset(self):
+        state = self.env.reset()
+        #p_state = self.preproc_state(state)
+        states = torch.cat([self.preproc_state(state, idx) for idx in range(self.skip)], dim=1)
+
         return states
 
 class CustomSkipFrame(Wrapper):
@@ -352,11 +571,14 @@ class CustomSkipFrame(Wrapper):
         return states.astype(np.float32)
 
 def create_train_env(layout, output_path=None, index=None):
-    if True:
+    if layout=='atari':
         #print("es atari")
         env, nInNN, nOutNN = create_train_env_atari(layout, output_path, index)
-    else:
+    elif layout=='cs188x':
         #print("es cs188x")
+        env, nInNN, nOutNN = create_train_env_cs188x(layout, output_path, index)
+    else:
+        print('layout not understood, using cs188x')
         env, nInNN, nOutNN = create_train_env_cs188x(layout, output_path, index)
     return env, nInNN, nOutNN
 
@@ -380,7 +602,7 @@ def create_train_env_atari(layout, output_path=None, index=None):
     #env = CustomReward(env, monitor)
     #env = SameReward(env, monitor)
     #env = CustomSkipFrame(env)
-    env = DQNSkipFrame(env)
+    env = DQNColourSkipFrame(env)
     # positives rewards are 1, others 0
     env = UnitReward(env)
     # Four times same frame input, no skip
@@ -410,13 +632,13 @@ def create_train_env_cs188x(layout, output_path=None, index=None):
     actions = ['North', 'South', 'East', 'West', 'Stop']
     # Wraps around env:
     #env = CustomReward(env, monitor)
-    env = SameReward(env, monitor)
+    env = UnitReward_cs188x(env, monitor)
     #env = CustomSkipFrame(env)
     #env = DQNSkipFrame(env)
     # Four times same frame input, no skip
     #env = NoSkipFrame(env)
     # Four rotations of same frame input, no skip
-    env = NoSkipFrameFourRotations(env)
+    env = NoSkipFrameColourFourRotations(env)
     #return env, env.observation_space.shape[0], len(actions)
     num_inputs_to_nn = 4#x84x84
     num_outputs_from_nn = len(actions)

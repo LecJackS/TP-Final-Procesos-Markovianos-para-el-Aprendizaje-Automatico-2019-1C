@@ -5,7 +5,8 @@ import argparse
 import torch
 from src.env import create_train_env
 from src.model import Mnih2016ActorCriticWithDropout, SimpleActorCriticWithDropout
-AC_NN_MODEL = SimpleActorCriticWithDropout
+AC_NN_MODEL = Mnih2016ActorCriticWithDropout
+#AC_NN_MODEL = SimpleActorCriticWithDropout
 
 from src.optimizer import GlobalRMSprop, GlobalAdam
 from src.process import local_train, local_test
@@ -33,11 +34,13 @@ def get_args():
     parser.add_argument("--load_previous_weights", type=bool, default=True,
                         help="Load weight from previous trained stage")
     parser.add_argument("--use_gpu", type=bool, default=True)
+    parser.add_argument("--record", type=bool, default=False,
+                        help="Save snapshot from each input frame on ./snaps")
     args = parser.parse_args()
     return args
 
 def train(opt):
-    torch.manual_seed(123)
+    torch.manual_seed(42)
     # Prepare log directory
     if os.path.isdir(opt.log_path):
         shutil.rmtree(opt.log_path)
@@ -61,7 +64,22 @@ def train(opt):
         file_ = "{}/gym-pacman_{}".format(opt.saved_path, opt.layout)
         if os.path.isfile(file_):
             print("Loading previous weights for %s..." %opt.layout, end=" ")
-            global_model.load_state_dict(torch.load(file_))
+            # global_model.load_state_dict(torch.load(file_))
+            pretrained_dict = torch.load(file_)
+            global_model_dict = global_model.state_dict()
+            # 1. filter out unnecessary keys (if trained with different model)
+            # for k, v in pretrained_dict.items():
+            #     if k in global_model_dict:
+            #         print("loading and freezing key: {}".format(k))
+            #         #getattr(global_model,k).requires_grad = False
+            #     else:
+            #         print("key {} do not exist".format(k))
+            pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in global_model_dict}
+            
+            # 2. overwrite entries in the existing state dict
+            global_model_dict.update(pretrained_dict) 
+            # 3. load the new state dict (only existing keys)
+            global_model.load_state_dict(pretrained_dict, strict=False)
             print("Done.")
         else:
             print("Can't load any previous weights for %s! Starting from scratch..." %opt.layout)
