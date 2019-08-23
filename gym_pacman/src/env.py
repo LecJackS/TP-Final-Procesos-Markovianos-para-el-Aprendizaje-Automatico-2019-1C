@@ -482,19 +482,30 @@ class DQNColourSkipFrame(Wrapper):
         size = (84,84)
         mean = (0,0,0) #by channel
         std = (1,1,1)
+        # ms-pacman state: array of shape (210,160,3)
         self.transform_gray = transforms.Compose([
+                        # padding for the left, top, right and bottom borders respectively.
                         transforms.ToTensor(),
                         transforms.Normalize(mean, std),
                         transforms.ToPILImage(),
+                        # Remove extra bottom part from ms-pacman atari
+                        transforms.Pad((0,14,0,0)),
+                        transforms.CenterCrop((194, 160)),
+                        # Resize to 84x84
                         transforms.Resize(size),
                         transforms.Grayscale(),
                         transforms.ToTensor(),
                         transforms.Normalize([0], [1])
                     ])
         self.transform_colour = transforms.Compose([
+                        
                         transforms.ToTensor(),
                         transforms.Normalize(mean, std),
                         transforms.ToPILImage(),
+                        # Remove extra bottom part from ms-pacman atari
+                        transforms.Pad((0,14,0,0)),
+                        transforms.CenterCrop((194, 160)),
+                        # Resize to 84x84
                         transforms.Resize(size),
                         transforms.ToTensor(),
                         transforms.Normalize(mean, std)

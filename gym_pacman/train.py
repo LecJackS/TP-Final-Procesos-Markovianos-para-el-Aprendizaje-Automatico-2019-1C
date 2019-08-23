@@ -5,8 +5,8 @@ import argparse
 import torch
 from src.env import create_train_env
 from src.model import Mnih2016ActorCriticWithDropout, SimpleActorCriticWithDropout
-AC_NN_MODEL = Mnih2016ActorCriticWithDropout
-#AC_NN_MODEL = SimpleActorCriticWithDropout
+#AC_NN_MODEL = Mnih2016ActorCriticWithDropout
+AC_NN_MODEL = SimpleActorCriticWithDropout
 
 from src.optimizer import GlobalRMSprop, GlobalAdam
 from src.process import local_train, local_test

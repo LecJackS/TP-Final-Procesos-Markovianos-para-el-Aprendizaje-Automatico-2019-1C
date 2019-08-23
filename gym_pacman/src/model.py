@@ -96,7 +96,7 @@ class SimpleActorCriticWithDropout(nn.Module):
         x = F.relu(self.linear(x.view(x.size(0), -1)))
         # Softmax is applied later, same with log-softmax
         actor  = self.actor_drop(self.actor_linear(x))
-        critic = self.critic_drop(self.critic_linear(x))
+        critic = torch.tanh(self.critic_drop(self.critic_linear(x)))
         # Uncomment to print forward values
         #print("Actor: " , actor)
         #print("Critic: ", critic)
@@ -159,7 +159,8 @@ class Mnih2016ActorCriticWithDropout(nn.Module):
         hx, cx = self.lstm(x.view(x.size(0), -1), (hx, cx))
         # Softmax is applied later, same with log-softmax
         actor  = self.actor_drop(self.actor_linear(hx))
-        critic = self.critic_drop(self.critic_linear(cx))
+        critic = torch.tanh(self.critic_drop(self.critic_linear(cx)))
+        #critic = self.critic_drop(self.critic_linear(cx))
         # Uncomment to print forward values
         #print("Actor: " , actor)
         #print("Critic: ", critic)

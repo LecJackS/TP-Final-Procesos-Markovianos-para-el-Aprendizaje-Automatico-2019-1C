@@ -4,8 +4,8 @@ import torch
 from src.env import create_train_env
 
 from src.model import Mnih2016ActorCriticWithDropout, SimpleActorCriticWithDropout
-AC_NN_MODEL = Mnih2016ActorCriticWithDropout
-#AC_NN_MODEL = SimpleActorCriticWithDropout
+#AC_NN_MODEL = Mnih2016ActorCriticWithDropout
+AC_NN_MODEL = SimpleActorCriticWithDropout
 ACTOR_HIDDEN_SIZE=256
 CRITIC_HIDDEN_SIZE=256
 
@@ -79,6 +79,12 @@ def local_train(index, opt, global_model, optimizer, save=False):
             print("Process {}. Episode {}   ".format(index, curr_episode))
         curr_episode += 1
         episode_reward = 0
+        # Keep track of min/max Gt and Actor Loss to clamp Critic and Actor
+        if (curr_episode-1)%1000==0:
+            # Resets values every 1000 episodes
+            min_Gt = -1
+            max_Gt = 1
+            max_AL = 0.1
         # Synchronize thread-specific parameters theta'=theta and theta'_v=theta_v
         # (copy global params to local params (after every episode))
         local_model.load_state_dict(global_model.state_dict(), strict=True)
@@ -104,12 +110,16 @@ def local_train(index, opt, global_model, optimizer, save=False):
             # * Action prediction (Policy function) -> logits (array with every action-value)
             # * Value prediction (Value function)   -> value (single value state-value)
             logits, value, h_0, c_0 = local_model(state, h_0, c_0)
+
             # Simple estimation: between(-1,1)
-            value.clamp(-1.,1.)
+            #value = value.clamp(min_Gt, max_Gt)
             # Softmax over action-values
             policy = F.softmax(logits, dim=1)
             # Log-softmax over action-values, to get the entropy of the policy
             log_policy = F.log_softmax(logits, dim=1)
+            #print('0. policy----------: \n', policy)
+            #print('1. logits----------: \n', logits)
+            #print('2. log_policy------: \n', log_policy)
             # Entropy acts as exploration rate
             entropy = -(policy * log_policy).sum(1, keepdim=True)
             # From Async Methods for Deep RL:
@@ -156,6 +166,10 @@ def local_train(index, opt, global_model, optimizer, save=False):
             # Save state-value, log-policy, reward and entropy of
             # every state we visit, to gradient-descent later
             values.append(value)
+            #print('log_policy: \n', log_policy)
+            #print('action: ',action)
+            #print('log_policy[0, 0]: \n', log_policy[0, 0])
+            #print('log_policy[0, 1]: \n', log_policy[0, 1])
             log_policies.append(log_policy[0, action])
             rewards.append(reward)
             entropies.append(entropy)
@@ -163,73 +177,31 @@ def local_train(index, opt, global_model, optimizer, save=False):
             if done:
                 # All local steps done.
                 break
+
         # Save history every n episodes as statistics (just from one process)
         if index==0: 
-            #sample_size = 100
-            # hist_idx = (curr_episode - 1)%sample_size
-            # if hist_idx==0:
-            #     reward_hist = np.zeros(sample_size)
-            # reward_hist[hist_idx] = episode_reward
             reward_hist.append(episode_reward)
             if True:#hist_idx==sample_size-1:
                 r_mean   = np.mean(reward_hist)
                 r_median = np.median(reward_hist)
                 r_std    = np.std(reward_hist)
                 stand_median = (r_median - r_mean) / (r_std + 1e-9)
-                writer.add_scalar("Process_{}/Last100Statistics_mean".format(index), r_mean, curr_episode)
-                writer.add_scalar("Process_{}/Last100Statistics_median".format(index), r_median, curr_episode)
-                writer.add_scalar("Process_{}/Last100Statistics_std".format(index), r_std, curr_episode)
-                #stand_median = (np.median(reward_hist)-np.mean(reward_hist))/np.std(reward_hist)
-                writer.add_scalar("Process_{}/Last100Statistics_stand_median".format(index), stand_median, curr_episode)
-
-                # print("Final statistics:")
-                # print("Rewards:", reward_hist)
-                # print("Mean:", np.mean(reward_hist))
-                # print("Median:", np.median(reward_hist))
-                # print("StD:", np.std(reward_hist))
-                # print("(med-mean)/std:", stand_median)
-            #if record_tag:
-            #    reward_hist[hist_idx] = episode_reward
-            #    hist_idx += 1
-            #if curr_episode % 200 == 0:
-            #    record_tag = False
-            #    writer.add_scalar("Process_{}/Last100Statistics_mean".format(index), np.mean(reward_hist), curr_episode)
-            #    writer.add_scalar("Process_{}/Last100Statistics_median".format(index), np.median(reward_hist), curr_episode)
-            #    writer.add_scalar("Process_{}/Last100Statistics_std".format(index), np.std(reward_hist), curr_episode)
-            #    stand_median = (np.median(reward_hist)-np.mean(reward_hist))/np.std(reward_hist)
-            #    writer.add_scalar("Process_{}/Last100Statistics_stand_median".format(index), stand_median, curr_episode)
-
-            #    print("Final statistics:")
-            #    print("Rewards:", reward_hist)
-            #    print("Mean:", np.mean(reward_hist))
-            #    print("Median:", np.median(reward_hist))
-             #   print("StD:", np.std(reward_hist))
-
-            #    print("(med-mean)/std:", stand_median)
-            #elif curr_episode % 100 == 0:
-            #    record_tag = True
-            #    hist_idx = 0
-        # fin save history
-        # Baseline rewards standarization over episode rewards.
-        # Uncomment prints to see how rewards change
-        # Should I
-        #if index == 0:
-        #    print("Rewards before:", rewards)
-        mean_rewards = np.mean(rewards)
-        std_rewards  = np.std(rewards)
-        rewards = (rewards - mean_rewards) / (std_rewards + 1e-9)
-        #if index == 0:
-        #    print("Rewards after:", rewards)
+                writer.add_scalar("Process_{}/Last100_mean".format(index), r_mean, curr_episode)
+                writer.add_scalar("Process_{}/Last100_median".format(index), r_median, curr_episode)
+                writer.add_scalar("Process_{}/Last100_std".format(index), r_std, curr_episode)
+                writer.add_scalar("Process_{}/Last100_stand_median".format(index), stand_median, curr_episode)
+        # Normalize Rewards
+        #mean_rewards = np.mean(rewards)
+        #std_rewards  = np.std(rewards)
+        #rewards = (rewards - mean_rewards) / (std_rewards + 1e-9)
         # Initialize R/G_t: Discounted reward over local steps
         R = torch.zeros((1, 1), dtype=torch.float)
         if opt.use_gpu:
             R = R.cuda()
         if not done:
             _, R, _, _ = local_model(state, h_0, c_0)
-        # Standarize this reward estimation too
-        #mean_rewards = np.mean([R, rewards])
-        #std_rewards  = np.std([R, rewards])
-        R = (R - mean_rewards) / (std_rewards + 1e-9)
+            # Simple state-value estimation: between(-30, 30)
+            #R = R.clamp(min_Gt, max_Gt)
         gae = torch.zeros((1, 1), dtype=torch.float)
         if opt.use_gpu:
             gae = gae.cuda()
@@ -245,24 +217,46 @@ def local_train(index, opt, global_model, optimizer, save=False):
             next_value = value
             # Accumulate discounted reward
             R = reward + opt.gamma * R
+            # For normalization/clamp
+            max_Gt = max(max_Gt, abs(R.detach().item()))
             # Accumulate gradients wrt parameters theta'
+            #print('log_policy:', log_policy)
+            #print('gae:', gae)
             actor_loss = actor_loss + log_policy * gae
+            #print('actor_loss:', actor_loss)
+            # For normalization/clamp
+            max_AL = max(max_AL, abs(actor_loss.detach().item()))
             # Accumulate gradients wrt parameters theta'_v
-            critic_loss = critic_loss + ((R - value)**2) / 2.
+            critic_loss = critic_loss + ((R/max_Gt - value) ** 2) / 2.
             entropy_loss = entropy_loss + entropy
-        # Clamp critic loss value if too big
-        #max_critic_loss = 1./opt.lr
-        #critic_loss = critic_loss.clamp(-max_critic_loss, max_critic_loss)
-        # Total process' loss
-        total_loss = -actor_loss + critic_loss - opt.beta * entropy_loss
-        # Clamp loss value if too big
-        #max_loss =  2 * max_critic_loss
-        #total_loss = total_loss.clamp(-max_loss, max_loss)
+        # Update and keep track of (min_Gt, max_Gt) for Critic range
+        # as an exponential cummulative average
 
+        #max_Gt = 0.495*max_Gt + 0.505*(max(1, R.item())-max_Gt)/(curr_episode)
+        
+        # Total process' loss
+        #print('actor_loss',actor_loss)
+        #print('critic_loss',critic_loss)
+        #print('entropy_loss',opt.beta * entropy_loss)
+        # Make sure that max update is about 1.0 (lr * critic_loss)<1,
+        # so updates to weights are not excesive.
+        # ie: lr=1e-4; max critic_loss == 1/1e-4 = 1e4 = 10000
+        #     lr*loss == 0.0001*10000 == 1 (close to 1)
+        critic_loss = max_Gt * critic_loss
+        # Normalize actor loss
+        actor_loss =  actor_loss#max_AL # 3.*actor_loss funca bien con critic_loss sin modificar
+        #print('actor_loss final:', actor_loss)
+        total_loss = -actor_loss + critic_loss - opt.beta * entropy_loss
         # Saving logs for TensorBoard
         if index==0:
             writer.add_scalar("Process_{}/Total_Loss".format(index), total_loss, curr_episode)
+            writer.add_scalar("Process_{}/actor_Loss".format(index), -actor_loss, curr_episode)
+            writer.add_scalar("Process_{}/critic_Loss".format(index), critic_loss, curr_episode)
+            writer.add_scalar("Process_{}/entropy_Loss".format(index), -opt.beta*entropy_loss, curr_episode)
             writer.add_scalar("Process_{}/Acum_Reward".format(index), episode_reward, curr_episode)
+            writer.add_scalar("Process_{}/max_Gt".format(index), max_Gt, curr_episode)
+            writer.add_scalar("Process_{}/max_AL".format(index), max_Gt, curr_episode)
+            writer.add_scalar("Process_{}/Gt".format(index), R, curr_episode)
             #writer.add_scalar("actor_{}/Loss".format(index), -actor_loss, curr_episode)
             #writer.add_scalar("critic_{}/Loss".format(index), critic_loss, curr_episode)
             #writer.add_scalar("entropyxbeta_{}/Loss".format(index), opt.beta * entropy_loss, curr_episode)
@@ -317,7 +311,7 @@ def local_test(index, opt, global_model):
 
         logits, value, h_0, c_0 = local_model(state, h_0, c_0)
         # Simple estimation: between(-1,1)
-        value.clamp(-1.,1.)
+        value = value.clamp(-1.,1.)
         policy = F.softmax(logits, dim=1)
         action = torch.argmax(policy).item()
         state, reward, done, _ = env.step(action)
