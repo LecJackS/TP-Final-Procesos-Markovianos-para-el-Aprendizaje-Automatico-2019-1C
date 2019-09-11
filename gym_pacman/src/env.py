@@ -66,7 +66,7 @@ class UnitReward(Wrapper):
         #reward = info["score"]
         if reward > 0:
             reward = 1.
-        elif reward ==0:
+        elif reward == 0:
             reward = 0.
         else:
             #reward < 0
@@ -88,8 +88,10 @@ class UnitReward_cs188x(Wrapper):
         #print("info:", info)
         if reward > 0:
             reward = 1.
-        else:
+        elif reward == 0:
             reward = 0.
+        else:
+            reward = -1.
         #print("\naction:",action,"  reward:", reward)
         #print(info, "\n")
         return state, reward, done, info

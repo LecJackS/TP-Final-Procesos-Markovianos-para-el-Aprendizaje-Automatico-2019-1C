@@ -63,6 +63,9 @@ def local_train(index, opt, global_model, optimizer, save=False):
     done = True
     curr_step = 0
     curr_episode = 0
+    # Keep track of min/max Gt and Actor Loss to clamp Critic and Actor
+    max_Gt = 5.
+    max_AL = 1.
     if index == 0:
         interval = 100
         #reward_hist = np.zeros(interval)
@@ -79,12 +82,7 @@ def local_train(index, opt, global_model, optimizer, save=False):
             print("Process {}. Episode {}   ".format(index, curr_episode))
         curr_episode += 1
         episode_reward = 0
-        # Keep track of min/max Gt and Actor Loss to clamp Critic and Actor
-        if (curr_episode-1)%1000==0:
-            # Resets values every 1000 episodes
-            min_Gt = -1
-            max_Gt = 1
-            max_AL = 0.1
+        
         # Synchronize thread-specific parameters theta'=theta and theta'_v=theta_v
         # (copy global params to local params (after every episode))
         local_model.load_state_dict(global_model.state_dict(), strict=True)
@@ -106,11 +104,13 @@ def local_train(index, opt, global_model, optimizer, save=False):
         # Local steps
         for _ in range(opt.num_local_steps):
             curr_step += 1
+            # Decay max_Gt over time to adjust to present Gt scale
+            max_Gt = max_Gt * 0.9999
             # Model prediction from state. Returns two functions:
             # * Action prediction (Policy function) -> logits (array with every action-value)
             # * Value prediction (Value function)   -> value (single value state-value)
             logits, value, h_0, c_0 = local_model(state, h_0, c_0)
-
+            
             # Simple estimation: between(-1,1)
             #value = value.clamp(min_Gt, max_Gt)
             # Softmax over action-values
@@ -135,6 +135,7 @@ def local_train(index, opt, global_model, optimizer, save=False):
             # Perform action_t according to policy pi
             # Receive reward r_t and new state s_t+1
             state, reward, done, _ = env.step(action)
+            reward = reward / max_Gt
             episode_reward += reward
             if opt.record and index==0:
                 #save animation for each four-frame input
@@ -166,10 +167,6 @@ def local_train(index, opt, global_model, optimizer, save=False):
             # Save state-value, log-policy, reward and entropy of
             # every state we visit, to gradient-descent later
             values.append(value)
-            #print('log_policy: \n', log_policy)
-            #print('action: ',action)
-            #print('log_policy[0, 0]: \n', log_policy[0, 0])
-            #print('log_policy[0, 1]: \n', log_policy[0, 1])
             log_policies.append(log_policy[0, action])
             rewards.append(reward)
             entropies.append(entropy)
@@ -216,7 +213,8 @@ def local_train(index, opt, global_model, optimizer, save=False):
             gae = gae + reward + opt.gamma * next_value.detach() - value.detach()
             next_value = value
             # Accumulate discounted reward
-            R = reward + opt.gamma * R
+            R = reward +  opt.gamma * R
+
             # For normalization/clamp
             max_Gt = max(max_Gt, abs(R.detach().item()))
             # Accumulate gradients wrt parameters theta'
@@ -227,7 +225,7 @@ def local_train(index, opt, global_model, optimizer, save=False):
             # For normalization/clamp
             max_AL = max(max_AL, abs(actor_loss.detach().item()))
             # Accumulate gradients wrt parameters theta'_v
-            critic_loss = critic_loss + ((R/max_Gt - value) ** 2) / 2.
+            critic_loss = critic_loss + ((R - value) ** 2) / 2.
             entropy_loss = entropy_loss + entropy
         # Update and keep track of (min_Gt, max_Gt) for Critic range
         # as an exponential cummulative average
@@ -242,7 +240,7 @@ def local_train(index, opt, global_model, optimizer, save=False):
         # so updates to weights are not excesive.
         # ie: lr=1e-4; max critic_loss == 1/1e-4 = 1e4 = 10000
         #     lr*loss == 0.0001*10000 == 1 (close to 1)
-        critic_loss = max_Gt * critic_loss
+        critic_loss = critic_loss
         # Normalize actor loss
         actor_loss =  actor_loss#max_AL # 3.*actor_loss funca bien con critic_loss sin modificar
         #print('actor_loss final:', actor_loss)
