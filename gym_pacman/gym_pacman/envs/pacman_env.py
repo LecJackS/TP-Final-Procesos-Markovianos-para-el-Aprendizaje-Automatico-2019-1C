@@ -19,16 +19,16 @@ import os
 
 DEFAULT_GHOST_TYPE = 'DirectionalGhost'
 
-MAX_GHOSTS = 5
+MAX_GHOSTS = 50
 
 PACMAN_ACTIONS = ['North', 'South', 'East', 'West', 'Stop']
 PACMAN_DIRECTIONS = ['North', 'South', 'East', 'West']
 ROTATION_ANGLES = [0, 180, 90, 270]
 
-MAX_EP_LENGTH = 105
+MAX_EP_LENGTH = 500
 PENALTY_MAX_EP = 500.0 # positive number
-PENALTY_ILLEGAL_ACTION = 5.0
-PENALTY_TIME_STEP = 1.0
+PENALTY_ILLEGAL_ACTION = 0
+PENALTY_TIME_STEP = 0
 
 import os
 fdir = '/'.join(os.path.split(__file__)[:-1])
@@ -192,7 +192,6 @@ class PacmanEnv(gym.Env):
                 'max_ep': self.step_counter >= MAX_EP_LENGTH
             }
         #print("Action chosen :", action, "  ", end="\r")
-
         
         #pacman_action = PACMAN_ACTIONS[action]
         pacman_action = PACMAN_ACTIONS[action]

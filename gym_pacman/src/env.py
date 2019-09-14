@@ -84,11 +84,11 @@ class UnitReward_cs188x(Wrapper):
         
     def step(self, action):
         state, reward, done, info = self.env.step(action)
-         
         #print("info:", info)
         if reward > 0:
             reward = 1.
-        elif reward == 0:
+        elif reward==0 or reward==-1:
+            # Couldn't remove penalty by timestep from env
             reward = 0.
         else:
             reward = -1.
@@ -244,8 +244,8 @@ class NoSkipFrameColourFourRotations(Wrapper):
          rot90(T),
          rot180(T),
          rot270(T)] """
-    def init(self, env, skip=4):
-        super(NoSkipFrameColourFourRotations, self).init(env)
+    def __init__(self, env, skip=4):
+        super(NoSkipFrameColourFourRotations, self).__init__(env)
         #self.observation_space = Box(low=0, high=255, shape=(4, 84, 84))
         #self.skip = skip
         size = (84,84)

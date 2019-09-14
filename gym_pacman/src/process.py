@@ -52,19 +52,15 @@ def local_train(index, opt, global_model, optimizer, save=False):
     # Tell the model we are going to use it for training
     local_model.train()
     # env.reset and get first state
-    if True:#opt.layout == 'atari':
-        # Reshape image from HxWxC -to-> CxHxW
-        state = env.reset()
-        #state = preproc_state(np_state)
-    else:
-        state = torch.from_numpy(env.reset())
+    state = env.reset()
+    #state = torch.from_numpy(env.reset())
     if opt.use_gpu:
         state = state.cuda()
     done = True
     curr_step = 0
     curr_episode = 0
     # Keep track of min/max Gt and Actor Loss to clamp Critic and Actor
-    max_Gt = 5.
+    max_Gt = 3.
     max_AL = 1.
     if index == 0:
         interval = 100
@@ -105,7 +101,7 @@ def local_train(index, opt, global_model, optimizer, save=False):
         for _ in range(opt.num_local_steps):
             curr_step += 1
             # Decay max_Gt over time to adjust to present Gt scale
-            max_Gt = max_Gt * 0.9999
+            max_Gt = max_Gt * 0.99999
             # Model prediction from state. Returns two functions:
             # * Action prediction (Policy function) -> logits (array with every action-value)
             # * Value prediction (Value function)   -> value (single value state-value)

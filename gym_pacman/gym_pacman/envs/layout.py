@@ -20,8 +20,8 @@ import numpy as np
 
 VISIBILITY_MATRIX_CACHE = {}
 
-WALL, EMPTY, PACMAN, GHOST, FOOD = 0, 1, 2, 3, 4
-ITEM_REPR_STR = '% PG.'
+WALL, EMPTY, PACMAN, GHOST, FOOD, SUPER = 0, 1, 2, 3, 4, 5
+ITEM_REPR_STR = '% PG.o'
 
 class Layout:
     """
@@ -220,6 +220,7 @@ def randomLayout(layout_params, np_random):
     min_nghosts = layout_params.get('min_nghosts', 1)
     max_nghosts = layout_params.get('max_nghosts', 2)
     nghosts = np.random.randint(min_nghosts, max_nghosts+1)
+    #print(layout_params)
     #random_npellets = True
     #if random_npellets:
     #    min_npellets = 1
@@ -231,6 +232,9 @@ def randomLayout(layout_params, np_random):
     max_npellets = layout_params.get('max_npellets', 5)
     npellets = np.random.randint(min_npellets, max_npellets+1)
 
+    min_nsuper = layout_params.get('min_nsuper', 1)
+    max_nsuper = layout_params.get('max_nsuper', 5)
+    nsuper = np.random.randint(min_nsuper, max_nsuper+1)
     #random_food_proportion = False
     #if random_food_proportion:
     #    min_food_p = 0.02 #1/50
@@ -240,7 +244,7 @@ def randomLayout(layout_params, np_random):
     #    food_proportion = layout_params.get('food_proportion', 1.0)
     by_proportion = layout_params.get('by_proportion', True)
     min_food_p = layout_params.get('min_food_proportion', 0.1)
-    max_food_p = layout_params.get('min_food_proportion', 0.5)
+    max_food_p = layout_params.get('max_food_proportion', 0.5)
     food_proportion = np.random.uniform(min_food_p, max_food_p)
     
     # Adds walls randomly arranged
@@ -286,13 +290,21 @@ def randomLayout(layout_params, np_random):
         #    print("chosen food:", py, px)
         #    maze[py, px] = FOOD
         #    foods.append((py, px)) #<
+    
     reachable = dfsReachabilityCheck(maze, start_x, start_y, foods)
     if not reachable:
         print('Something wrong happened, not reachable')
         return None, True
+        
     empty_positions = np.where(maze == EMPTY)
-
-    
+    empty_positions = np.vstack(empty_positions)
+    super_positions = np.random.choice(np.arange(empty_positions[0].shape[0]), nsuper)
+    for pos in super_positions:
+        super_pos_y = empty_positions[0][pos]
+        super_pos_x = empty_positions[1][pos]
+        maze[super_pos_y, super_pos_x] = SUPER
+        foods.append((super_pos_y, super_pos_x))
+    empty_positions = np.where(maze == EMPTY)
 
     maze_str = []
     for i in range(maze.shape[0]):
