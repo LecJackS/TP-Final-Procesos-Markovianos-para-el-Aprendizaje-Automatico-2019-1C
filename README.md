@@ -1,6 +1,6 @@
-# Update
+# Update: Retrying to Pacman
 
-[./gympacman/Retrying to Pacman.ipynb](./gym-pacman/Retrying to Pacman.ipynb)
+Continues from previous notebook, on [./gympacman/Retrying to Pacman.ipynb](./gym-pacman/Retrying-to-Pacman.ipynb)
 
 # TP Final - Procesos Markovianos para el Aprendizaje Automatico 2019 1C
 
