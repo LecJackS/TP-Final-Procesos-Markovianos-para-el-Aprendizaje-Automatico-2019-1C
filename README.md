@@ -1,4 +1,8 @@
-### TP-Final-Procesos-Markovianos-para-el-Aprendizaje-Automatico-2019-1C
+# Update
+
+[./gympacman/Retrying to Pacman.ipynb](./gym-pacman/Retrying to Pacman.ipynb)
+
+# TP Final - Procesos Markovianos para el Aprendizaje Automatico 2019 1C
 
 #### Without junk files:
 https://github.com/LecJackS/TP-Final-Procesos-Markovianos-para-el-Aprendizaje-Automatico-2019-1C-w.o.heavy-history-
